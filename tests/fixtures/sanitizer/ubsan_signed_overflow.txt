@@ -1,0 +1,4 @@
+/src/app/math.c:42:17: runtime error: signed integer overflow: 2147483647 + 1 cannot be represented in type 'int'
+    #0 0x4c1a2b in compute_sum /src/app/math.c:42:17
+    #1 0x4c3c4d in LLVMFuzzerTestOneInput /src/harness/math_fuzzer.cc:25:3
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior /src/app/math.c:42:17 in compute_sum

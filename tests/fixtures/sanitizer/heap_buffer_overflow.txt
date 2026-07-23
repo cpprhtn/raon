@@ -1,0 +1,15 @@
+=================================================================
+==12345==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000eff0 at pc 0x0000004a1b2c bp 0x7ffd1234 sp 0x7ffd5678
+READ of size 4 at 0x60200000eff0 thread T0
+    #0 0x4a1b2c in png_read_idat /src/libpng/pngrutil.c:1234:45
+    #1 0x4a3d4e in png_read_row /src/libpng/pngread.c:456:9
+    #2 0x4a5f60 in png_read_image /src/libpng/pngread.c:678
+    #3 0x4a7182 in LLVMFuzzerTestOneInput /src/harness/libpng_read_fuzzer.cc:90:3
+    #4 0x7f1234567890 in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x21b96)
+
+0x60200000eff0 is located 0 bytes to the right of 16-byte region
+allocated by thread T0 here:
+    #0 0x49abcd in malloc (/out/libpng_read_fuzzer+0x49abcd)
+    #1 0x4a9999 in png_malloc /src/libpng/pngmem.c:200:12
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /src/libpng/pngrutil.c:1234:45 in png_read_idat

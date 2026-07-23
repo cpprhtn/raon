@@ -1,0 +1,12 @@
+=================================================================
+==999==ERROR: AddressSanitizer: heap-use-after-free on address 0x602000000010 at pc 0x0000005b2c3d
+WRITE of size 8 at 0x602000000010 thread T0
+    #0 0x5b2c3d in process_record /src/app/record.c:88:5
+    #1 0x5b4e5f in handle_input /src/app/input.c:210:12
+    #2 0x5b6071 in LLVMFuzzerTestOneInput /src/harness/app_fuzzer.cc:40:3
+
+freed by thread T0 here:
+    #0 0x49abcd in free (/out/app_fuzzer+0x49abcd)
+    #1 0x5b1234 in free_record /src/app/record.c:70:3
+
+SUMMARY: AddressSanitizer: heap-use-after-free /src/app/record.c:88:5 in process_record
