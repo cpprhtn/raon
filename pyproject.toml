@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "raon"
+version = "0.0.0"
+description = "LLM 기반 취약점 발견 시스템 — 퍼징 · 멀티에이전트 오케스트레이션 · 바이너리 분석을 하나의 피드백 루프로 (이름 선점용 pre-alpha 플레이스홀더)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Junwon Lee" }]
+keywords = ["fuzzing", "security", "vulnerability", "llm", "multi-agent", "binary-analysis"]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
+
+[project.urls]
+Homepage = "https://github.com/cpprhtn/raon"
+Repository = "https://github.com/cpprhtn/raon"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/raon"]
