@@ -1,97 +1,52 @@
 # raon
 
-> **LLM 기반 취약점 발견 시스템** — LLM에게 "버그를 찾게" 하지 않고,
-> "버그를 찾아낼 최고의 테스트베드를 자동 생성·운영"하게 한다.
+> **LLM-driven vulnerability discovery** — don't ask the LLM to "find the bug";
+> have it automatically build and operate the best testbed for finding one.
 
-`raon`은 **퍼징 · 멀티에이전트 오케스트레이션 · 바이너리 분석**을 하나의 닫힌 피드백 루프로
-묶어 소프트웨어 취약점을 자동으로 발견·트리아지하는 연구용 프레임워크입니다. 세 컴포넌트는
-독립 도구가 아니라 **같은 데이터 모델(공유 계약) 위에서 도는 하나의 루프**입니다.
+`raon` ties **fuzzing · multi-agent orchestration · binary analysis** into a single
+closed feedback loop to automatically discover and triage software vulnerabilities. The three
+components are not standalone tools — they are **one loop running on a shared data model
+(shared contracts)**.
+
+**Languages:** English · [한국어](README.ko.md) · [中文](README.zh.md)
 
 [![CI](https://github.com/cpprhtn/raon/actions/workflows/ci.yml/badge.svg)](https://github.com/cpprhtn/raon/actions/workflows/ci.yml)
 
-> ⚠️ **상태: 연구용 pre-alpha.** 코어 파이프라인(공유 계약 · 블랙보드 · LLM 전략층 · 퍼징 엔진 ·
-> 하네스 자동합성 · 멀티에이전트 트리아지 · 지표)은 **동작하며 테스트로 검증**됩니다. Magma
-> 대규모 캠페인·바이너리 확장은 로드맵 참조.
+> ⚠️ **Status: research pre-alpha.** The core pipeline (shared contracts, blackboard, LLM
+> strategy layer, fuzzing engine, harness auto-synthesis, multi-agent triage, metrics) **works
+> and is covered by tests**. Large-scale Magma campaigns and the binary-analysis extension are
+> on the roadmap.
 
 ---
 
-## 설계 원칙
-
-1. **LLM은 전략층에만 (hot loop 금지).** 퍼저는 초당 수천~수백만 exec, LLM은 초당 ~1 call.
-   퍼저는 네이티브 subprocess로 돌고, LLM(`raon.llm`)은 *어디를·무엇으로·어떻게* 칠지 정하는
-   층에만 이벤트 트리거로 개입한다.
-2. **기존 인프라를 재구현하지 않는다.** ASan/UBSan, AFL++/libFuzzer, angr, Ghidra는 이미 검증됨.
-   raon은 이걸 *조립·해석·연결*한다. 새로움은 래핑이 아니라 오케스트레이션/추론에 있다.
-3. **수직 슬라이스 먼저.** 한 타겟 → 한 하네스 → 한 크래시 → 한 트리아지를 3개 컴포넌트에
-   관통시켜 유기적 결합을 먼저 증명한다. (→ `raon run`, 통합 테스트로 실증)
-
----
-
-## 아키텍처
-
-```
-            ┌──────────────────────────────────────────────────────┐
-            │      공유 저장소 (블랙보드, SQLite WAL)                │
-            │  KnowledgeBase · TargetStore · Corpus · FindingStore  │
-            └──────────────────────────────────────────────────────┘
-                 ▲            ▲              ▲              ▲
-   ┌─────────────┴───┐  ┌─────┴──────┐  ┌────┴─────────┐  ┌┴─────────────────┐
-   │ 바이너리 분석    │→ │ 멀티에이전트 │→ │ 퍼징 엔진     │→ │ 멀티에이전트      │
-   │ (grounding)     │  │ (계획)      │  │ (subprocess) │  │ (트리아지: 심장)  │
-   └──────────────────┘  └─────────────┘  └──────────────┘  └───────────────────┘
-```
-
-| 패키지 | 역할 |
-|---|---|
-| [`raon.contracts`](src/raon/contracts) | 공유 계약 4종(TargetDescriptor · Corpus · Finding · KnowledgeBase) — Pydantic, `schema_version` |
-| [`raon.store`](src/raon/store) | 블랙보드 저장소 — SQLite WAL + thread-local 연결(다중 리더/단일 라이터) |
-| [`raon.llm`](src/raon/llm) | 전략층 — Provider 추상화, 모델 티어링(Haiku/Opus), 프롬프트 해시 캐싱, JSONL 로깅 |
-| [`raon.fuzzing`](src/raon/fuzzing) | 엔진(clang+ASan subprocess), sanitizer 파서, 하네스 자동합성(self-repair) |
-| [`raon.triage`](src/raon/triage) | dedup 정규화·클러스터링, 증거 가중 충돌해소, exploitability 랭킹 |
-| [`raon.agents`](src/raon/agents) | Agent A(정적)/B(동적)/C(추론) + **Supervisor**(오케스트레이션) |
-| [`raon.knowledge`](src/raon/knowledge) | 도메인 지식(PNG 등) — 시드/문법 + Agent C 근거 |
-| [`raon.bench`](src/raon/bench) | Magma canary monitor 어댑터 + 핵심 지표 |
-| [`raon.binary`](src/raon/binary) | (P4) 크래시 grounding + LLM 타입 재복원 |
-
-**모듈 경계 = 공유 계약**: `fuzzing`은 `agents`를 몰라도 되고 오직 `contracts`/`store`로만
-대화한다(느슨한 결합).
-
----
-
-## 설치
+## Installation
 
 ```bash
-pip install raon                 # 코어
-pip install 'raon[llm]'          # + Anthropic(Claude) 프로바이더
-pip install 'raon[binary]'       # + angr/LIEF (P4 바이너리 분석)
-pip install 'raon[dev]'          # + 개발 도구(pytest/ruff/mypy)
+pip install raon                 # core
+pip install 'raon[llm]'          # + Anthropic (Claude) provider
+pip install 'raon[binary]'       # + angr/LIEF (P4 binary analysis)
+pip install 'raon[dev]'          # + dev tools (pytest/ruff/mypy)
 ```
 
-퍼징·통합 테스트에는 **clang**(ASan 포함)이 필요합니다. Linux clang은 libFuzzer 런타임까지
-포함하므로 `docker/Dockerfile` 환경에서 커버리지 유도 퍼징(LIBFUZZER 모드)도 동작합니다.
+Fuzzing and integration tests require **clang** (with ASan). Linux clang also ships the
+libFuzzer runtime, so coverage-guided fuzzing (LIBFUZZER mode) works inside the
+`docker/Dockerfile` environment.
 
 ---
 
-## 빠른 시작 (CLI)
+## Quickstart (CLI)
 
 ```bash
-# 내장 도메인 지식 확인
-raon kb
-
-# sanitizer 리포트 → 정규화 Finding (clang 불필요)
-raon triage crash_report.txt --target-id tgt_libpng --db raon.sqlite
-
-# 소스 있는 타겟을 컴파일·실행·트리아지 (clang 필요)
-raon run mytarget.c --input seed1.bin --input crash.bin --db raon.sqlite
-
-# 저장된 Finding을 exploitability로 랭킹해 출력
-raon report --db raon.sqlite
+raon kb                                          # list built-in domain knowledge
+raon triage crash_report.txt --target-id t --db raon.sqlite   # sanitizer report -> Finding (no clang)
+raon run mytarget.c --input seed.bin --input crash.bin --db raon.sqlite   # compile+run+triage (needs clang)
+raon report --db raon.sqlite                     # rank stored Findings by exploitability
 ```
 
-`raon run`은 타겟을 ASan으로 컴파일하고 입력들을 실행해, 크래시를 파싱→`Finding`으로
-정규화→블랙보드에 저장→Supervisor가 dedup·랭킹한 결과를 냅니다.
+`raon run` compiles the target with ASan, executes the inputs, then parses crashes into
+normalized `Finding`s, stores them on the blackboard, and lets the Supervisor dedup and rank.
 
-## 빠른 시작 (Python)
+## Quickstart (Python)
 
 ```python
 from raon.store import Blackboard
@@ -99,20 +54,18 @@ from raon.agents import AgentB, Supervisor
 from raon.knowledge import register_builtins
 
 with Blackboard("raon.sqlite") as bb:
-    register_builtins(bb)                       # PNG 등 도메인 지식 적재
+    register_builtins(bb)                       # load PNG etc. domain knowledge
 
-    # 크래시 리포트 → 정규화 Finding (동적 크래시, 높은 confidence)
     finding = AgentB().triage(open("crash.txt").read(),
                               target_id="tgt_x", reproducer="poc.bin")
     bb.put_finding(finding)
 
-    # dedup → 충돌해소 → exploitability 랭킹
-    result = Supervisor().triage(bb.list_findings())
+    result = Supervisor().triage(bb.list_findings())   # dedup -> conflict -> rank
     for f in result.representatives:
         print(f.category, f.exploitability, f.dedup_key[:12])
 ```
 
-LLM 전략층(하네스 합성·추론)을 쓰려면 프로바이더를 조립합니다:
+To use the LLM strategy layer (harness synthesis, inference), compose a provider:
 
 ```python
 from raon.llm import build_provider, PromptCache, JsonlLogger
@@ -120,65 +73,107 @@ from raon.llm.anthropic_provider import AnthropicProvider
 
 provider = build_provider(
     AnthropicProvider(),                        # Claude (adaptive thinking + effort)
-    cache=PromptCache(".raon/cache"),           # 재현성: 동일 프롬프트→동일 응답
-    logger=JsonlLogger(".raon/llm.jsonl"),      # 감사/비용 원장
+    cache=PromptCache(".raon/cache"),           # reproducibility: same prompt -> same response
+    logger=JsonlLogger(".raon/llm.jsonl"),      # audit / cost ledger
 )
 ```
 
 ---
 
-## 공유 계약 (Shared Contracts)
+## Design principles
 
-3개 컴포넌트가 유기적으로 붙는 이유는 전부 여기서 나옵니다.
-
-- **`TargetDescriptor`** — 무엇을 테스트하는가(시그니처·진입 경로·도메인 태그·우선순위)
-- **`Corpus`** — 탐색이 어디까지 갔나(시드·edge coverage·stuck_branches)
-- **`Finding`** — 버그 후보 하나(정규화된 보고 단위; 이종 증거를 한 테이블에서 비교)
-- **`KnowledgeBase`** — 도메인 사전(문법·시드·불변식·취약 인터페이스)
-
-`Finding`의 `dedup_key = sha1(normalized_stack + category)` — 정규화 규약은
-[`raon.triage.dedup`](src/raon/triage/dedup.py)에 명세되어 있고, 주소/라인/빌드경로 노이즈를
-제거해 리빌드에도 안정적입니다.
+1. **LLM stays in the strategy layer (never the hot loop).** The fuzzer runs thousands–millions
+   of execs/sec; the LLM runs ~1 call/sec. The fuzzer runs as a native subprocess; the LLM
+   (`raon.llm`) intervenes only in *where / what / how* to hit, on event triggers.
+2. **Don't reimplement existing infrastructure.** ASan/UBSan, AFL++/libFuzzer, angr, Ghidra are
+   proven. raon *assembles, interprets, and connects* them. Novelty is in orchestration/
+   reasoning, not wrapping.
+3. **Vertical slice first.** Thread one target → one harness → one crash → one triage through all
+   three components to prove organic coupling before deepening any tower (see `raon run`, proven
+   by the integration test).
 
 ---
 
-## 개발
+## Architecture
+
+Every component talks only through the **shared contracts** on the blackboard
+(KnowledgeBase · TargetStore · Corpus · FindingStore, SQLite WAL). This keeps them loosely
+coupled: `fuzzing` never imports `agents` — it speaks only `contracts`/`store`.
+
+| Package | Role |
+|---|---|
+| [`raon.contracts`](src/raon/contracts) | 4 shared contracts (TargetDescriptor · Corpus · Finding · KnowledgeBase), Pydantic, `schema_version` |
+| [`raon.store`](src/raon/store) | Blackboard — SQLite WAL + thread-local connections (many readers / single writer) |
+| [`raon.llm`](src/raon/llm) | Strategy layer — Provider abstraction, model tiering (Haiku/Opus), prompt-hash cache, JSONL logging |
+| [`raon.fuzzing`](src/raon/fuzzing) | Engine (clang+ASan subprocess), sanitizer parser, harness auto-synthesis (self-repair) |
+| [`raon.triage`](src/raon/triage) | dedup normalization/clustering, evidence-weighted conflict resolution, exploitability ranking |
+| [`raon.agents`](src/raon/agents) | Agent A (static) / B (dynamic) / C (inference) + **Supervisor** (orchestration) |
+| [`raon.knowledge`](src/raon/knowledge) | Domain knowledge (PNG, …) — seeds/grammar + Agent C grounds |
+| [`raon.bench`](src/raon/bench) | Magma canary-monitor adapter + core metrics |
+| [`raon.binary`](src/raon/binary) | (P4) crash grounding + LLM type re-recovery |
+
+**Data flow (one cycle):** Ingest → Plan (priority, harness synth, seed select) → Explore
+(coverage-guided fuzzing → Corpus + dynamic Finding) → Ground (crash addr → function context,
+when no source) → Reason (static/inference Findings) → Triage (dedup → conflict → exploitability)
+→ Feedback (update priorities, request harnesses, refine seeds) → back to Plan.
+
+---
+
+## Shared contracts
+
+Everything that makes the three components couple organically comes from here:
+
+| Contract | Meaning |
+|---|---|
+| `TargetDescriptor` | *what* to test (signature · entry path · domain tags · priority) |
+| `Corpus` | *how far* exploration got (seeds · edge coverage · stuck_branches) |
+| `Finding` | one bug candidate (normalized unit; compares heterogeneous evidence in one table) |
+| `KnowledgeBase` | domain dictionary (grammar · seeds · invariants · weak interfaces) |
+
+`Finding.dedup_key = sha1(normalized_stack + category)` — the normalization spec lives in
+[`raon.triage.dedup`](src/raon/triage/dedup.py) and strips address/line/build-path noise so the
+key is stable across rebuilds.
+
+---
+
+## Development
 
 ```bash
 pip install -e '.[dev,llm]'
-ruff check src tests      # 린트
-mypy                      # 타입(strict)
-pytest -q                 # 전체 (통합 테스트는 clang 있으면 자동 실행)
-pytest -q -m "not integration"   # clang 없이 유닛만
+ruff check src tests      # lint (auto-fix: ruff check --fix)
+mypy                      # types (strict)
+pytest -q                 # full suite (integration tests auto-run when clang is present)
+pytest -q -m "not integration"   # unit only, no clang
 ```
 
-Docker로 재현 환경 전체 실행:
+Run the full reproducible environment in Docker (Linux clang exercises the libFuzzer path):
 
 ```bash
 docker build -f docker/Dockerfile -t raon:ci . && docker run --rm raon:ci
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [examples/](examples/) for a runnable
+end-to-end demo.
+
 ---
 
-## 로드맵
+## Roadmap
 
-| Phase | 상태 | 내용 |
+| Phase | Status | Content |
 |---|---|---|
-| **P0** 공유 계약 + 벤치 | ✅ | 스키마 4종 · 블랙보드 · LLM 추상화 · Magma monitor 어댑터 |
-| **P1** 수직 슬라이스 v0 | ✅ | 컴파일→크래시→파싱→Finding→저장→랭킹 (실 clang e2e) |
-| **P2** 퍼징 심화 | 🚧 | 하네스 자동합성+self-repair ✅ · 시드 프라이밍/stuck-escape ⏳ |
-| **P3** 오케스트레이션 심화 | 🚧 | dedup2·충돌해소·랭킹 ✅ · 단일 vs 멀티 실험 ⏳ |
-| **P4** 바이너리 확장 | 🚧 | grounding·LLM 재타이핑 ✅ · Ghidra·자체 벤치 ⏳ |
-
-설계 문서는 로컬 `System Design/`(비공개)에 있으며 이 README와 코드 docstring이 공개 요약입니다.
+| **P0** contracts + bench | ✅ | 4 schemas · blackboard · LLM abstraction · Magma monitor adapter |
+| **P1** vertical slice v0 | ✅ | compile → crash → parse → Finding → store → rank (real clang e2e) |
+| **P2** fuzzing depth | 🚧 | harness auto-synth + self-repair ✅ · seed priming / stuck-escape ⏳ |
+| **P3** orchestration depth | 🚧 | dedup2 · conflict resolution · ranking ✅ · single-vs-multi experiment ⏳ |
+| **P4** binary extension | 🚧 | grounding · LLM re-typing ✅ · Ghidra · self-benchmark ⏳ |
 
 ---
 
-## 보안·윤리
+## Security & ethics
 
-raon은 취약점 발견 도구입니다. **권한 있는 사용·책임 있는 공개·재현성** 규약은
-[POLICY.md](POLICY.md)를 참고하세요.
+raon is a vulnerability-discovery tool. See [POLICY.md](POLICY.md) for authorized-use,
+responsible-disclosure, and reproducibility policy.
 
-## 라이선스
+## License
 
 [MIT](LICENSE) © 2026 Junwon Lee
