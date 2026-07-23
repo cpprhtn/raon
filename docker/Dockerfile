@@ -4,9 +4,13 @@
 FROM python:3.11-slim-bookworm
 
 # clang/llvm(ASan·UBSan·libFuzzer·SanitizerCoverage) + 심볼라이저
+# ‼️ libclang-rt-*-dev가 compiler-rt 런타임 정적 라이브러리
+# (libclang_rt.asan/fuzzer)를 제공한다. Debian arm64 clang 메타패키지는 이걸 빼므로
+# 명시 설치해야 ASan/libFuzzer 링크가 된다(x86_64는 대개 포함).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         clang \
         llvm \
+        libclang-rt-14-dev \
         make \
         git \
         ca-certificates \

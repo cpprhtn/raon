@@ -112,7 +112,7 @@ def compile_harness(
     *,
     mode: HarnessMode = HarnessMode.FILE_ARG,
     sanitizers: tuple[str, ...] = ("address", "undefined"),
-    coverage: bool = True,
+    coverage: bool = False,
     opt: str = "-O1",
     extra_flags: tuple[str, ...] = (),
     timeout: int = 120,
@@ -133,7 +133,10 @@ def compile_harness(
     if san:
         cmd.append("-fsanitize=" + ",".join(san))
     if coverage and mode != HarnessMode.LIBFUZZER:
-        # libFuzzer는 커버리지를 자동 추가하므로 중복 지정하지 않는다.
+        # ‼️ trace-pc-guard는 __sanitizer_cov_trace_pc_guard 콜백 소비자를 요구한다.
+        # 소비자 없이 켜면 Linux에서 링크 실패한다(macOS는 weak stub로 넘어감).
+        # 아직 FILE_ARG에서 sancov를 읽지 않으므로 기본 off. 켜는 쪽이 콜백을 제공해야 한다.
+        # libFuzzer 모드는 자체적으로 커버리지를 추가하므로 여기서 지정하지 않는다.
         cmd.append("-fsanitize-coverage=trace-pc-guard")
     cmd += [*extra_flags, *(str(s) for s in sources), "-o", str(out)]
 

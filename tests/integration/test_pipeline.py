@@ -13,12 +13,20 @@ import pytest
 
 from raon.agents import AgentB, Supervisor
 from raon.contracts import EvidenceKind, FindingCategory, TargetDescriptor, TargetKind
-from raon.fuzzing.engine import HarnessMode, clang_path, compile_harness, run_input
+from raon.fuzzing.engine import (
+    HarnessMode,
+    clang_path,
+    compile_harness,
+    fuzz,
+    libfuzzer_available,
+    run_input,
+)
 from raon.store import Blackboard
 
 pytestmark = pytest.mark.integration
 
 TARGET_SRC = Path(__file__).parent.parent / "fixtures" / "targets" / "vuln_decode.c"
+LIBFUZZER_SRC = Path(__file__).parent.parent / "fixtures" / "targets" / "decode_libfuzzer.c"
 
 if clang_path() is None:
     pytest.skip("clang not available", allow_module_level=True)
@@ -82,3 +90,30 @@ def test_full_vertical_slice(harness, tmp_path: Path) -> None:
     # 5. 재현 검증: reproducer로 다시 크래시가 나는가
     reproduced = run_input(harness, bad)
     assert reproduced.crashed and reproduced.error_type == "heap-buffer-overflow"
+
+
+@pytest.mark.skipif(not libfuzzer_available(), reason="libFuzzer runtime unavailable")
+def test_libfuzzer_coverage_guided_finds_crash(tmp_path: Path) -> None:
+    """★ 커버리지 유도 퍼징(LIBFUZZER 모드) — Linux clang에서만.
+
+    libFuzzer가 스스로 8바이트 경계를 넘겨 heap-buffer-overflow를 찾아낸다.
+    발견된 재현물을 Agent B가 정규화한다(진짜 퍼징 → Finding 관통).
+    """
+    harness = compile_harness(
+        [LIBFUZZER_SRC], tmp_path / "lf", mode=HarnessMode.LIBFUZZER
+    )
+    result = fuzz(
+        harness,
+        tmp_path / "corpus",
+        tmp_path / "artifacts",
+        max_total_time=30,
+        timeout=90,
+    )
+    assert result.crashed
+    assert result.reproducer is not None
+
+    finding = AgentB().triage(
+        result.sanitizer_output, target_id="tgt_lf", reproducer=result.reproducer
+    )
+    assert finding is not None
+    assert finding.category == FindingCategory.MEMORY
