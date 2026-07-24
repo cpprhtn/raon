@@ -2,7 +2,7 @@
 
 This project follows [Semantic Versioning](https://semver.org).
 
-## [Unreleased] — toward 0.1.0
+## [0.1.0] — 2026-07-24
 
 First working release. The core pipeline is covered by tests (120 tests, ruff + mypy strict
 clean, full suite green in Docker/Linux including the libFuzzer path, ~90% coverage).

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "raon"
-version = "0.0.0"
-description = "LLM 기반 취약점 발견 시스템 — 퍼징 · 멀티에이전트 오케스트레이션 · 바이너리 분석을 하나의 피드백 루프로"
+dynamic = ["version"]
+description = "Research framework for LLM-assisted vulnerability discovery: fuzzing, multi-agent triage, and binary analysis on one shared model"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
