@@ -1,7 +1,6 @@
 # 보안·재현성 정책 (POLICY)
 
 raon은 **취약점 발견 연구 도구**다. 그 성격상 권한·윤리·재현성 규약을 명시한다.
-(설계 리스크 레지스터 D4/D12/D13 대응 — `System Design/05` 참조.)
 
 ---
 
@@ -25,7 +24,7 @@ raon이 **실제 OSS/제품**에서 미공개 취약점을 발견하면:
 
 ## 3. 재현성 규약 (Reproducibility)
 
-실험은 반드시 재현 가능해야 한다(없으면 연구 가치 증명 불가, D4):
+실험은 반드시 재현 가능해야 한다:
 - **컨테이너 고정**: 툴체인(clang/llvm) 버전을 `docker/Dockerfile`로 고정.
 - **LLM I/O 전량 로깅**: `raon.llm.JsonlLogger`가 프롬프트·응답·모델·usage·비용을 JSONL로 기록.
 - **프롬프트 해시 캐싱**: `raon.llm.PromptCache`로 동일 프롬프트→동일 응답 재생

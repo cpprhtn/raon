@@ -1,21 +1,21 @@
 # raon
 
-> **LLM-driven vulnerability discovery** — don't ask the LLM to "find the bug";
-> have it automatically build and operate the best testbed for finding one.
+> **LLM-driven vulnerability discovery.** raon compiles your C/C++ target, fuzzes it under
+> sanitizers, and turns every crash into a clean, deduplicated, ranked bug report — with an
+> LLM in the loop to write harnesses and reason about findings, never in the hot path.
 
-`raon` ties **fuzzing · multi-agent orchestration · binary analysis** into a single
-closed feedback loop to automatically discover and triage software vulnerabilities. The three
-components are not standalone tools — they are **one loop running on a shared data model
-(shared contracts)**.
+Point raon at a target and a few inputs; get back normalized `Finding`s ranked by
+exploitability, with duplicate crashes collapsed. It orchestrates proven tools (clang/ASan,
+libFuzzer, angr) rather than reinventing them, and keeps every crash, corpus, and finding on a
+single shared store you can query.
 
 **Languages:** English · [한국어](README.ko.md) · [中文](README.zh.md)
 
 [![CI](https://github.com/cpprhtn/raon/actions/workflows/ci.yml/badge.svg)](https://github.com/cpprhtn/raon/actions/workflows/ci.yml)
 
-> ⚠️ **Status: research pre-alpha.** The core pipeline (shared contracts, blackboard, LLM
-> strategy layer, fuzzing engine, harness auto-synthesis, multi-agent triage, metrics) **works
-> and is covered by tests**. Large-scale Magma campaigns and the binary-analysis extension are
-> on the roadmap.
+> ⚠️ **Research pre-alpha.** The tool works end to end today for source-based C/C++ targets:
+> compile → fuzz/run → parse crash → dedup → rank → report, plus LLM harness synthesis. It is
+> for security research, CTFs, and authorized testing — see [POLICY.md](POLICY.md).
 
 ---
 
@@ -23,116 +23,135 @@ components are not standalone tools — they are **one loop running on a shared 
 
 ```bash
 pip install raon                 # core
-pip install 'raon[llm]'          # + Anthropic (Claude) provider
-pip install 'raon[binary]'       # + angr/LIEF (P4 binary analysis)
+pip install 'raon[llm]'          # + Claude provider (harness synthesis, triage summaries)
+pip install 'raon[binary]'       # + angr/LIEF (source-less targets, experimental)
 pip install 'raon[dev]'          # + dev tools (pytest/ruff/mypy)
 ```
 
-Fuzzing and integration tests require **clang** (with ASan). Linux clang also ships the
-libFuzzer runtime, so coverage-guided fuzzing (LIBFUZZER mode) works inside the
-`docker/Dockerfile` environment.
+You need **clang** (with AddressSanitizer) to compile and fuzz targets. On Linux, clang also
+ships the libFuzzer runtime, so coverage-guided fuzzing works out of the box; the included
+`docker/Dockerfile` gives you that environment on any host.
+
+---
+
+## What you can do today
+
+- **Run a target and get ranked bug reports** — `raon run` compiles your C source under
+  ASan/UBSan, executes your inputs, captures crashes, and reports them deduplicated and ranked.
+- **Coverage-guided fuzzing** — build a libFuzzer harness and let raon drive it (Linux / Docker).
+- **Turn an existing crash log into a finding** — `raon triage` parses an ASan/UBSan/LSan/TSan
+  report into a normalized, deduplicated `Finding` (no compiler needed).
+- **Auto-synthesize a fuzz harness** from a function signature, with a self-repairing
+  compile loop (requires the `[llm]` extra + an API key).
+- **Query and re-rank everything** — all findings live in a SQLite store; `raon report` ranks
+  them by exploitability and collapses duplicates.
 
 ---
 
 ## Quickstart (CLI)
 
 ```bash
-raon kb                                          # list built-in domain knowledge
-raon triage crash_report.txt --target-id t --db raon.sqlite   # sanitizer report -> Finding (no clang)
-raon run mytarget.c --input seed.bin --input crash.bin --db raon.sqlite   # compile+run+triage (needs clang)
-raon report --db raon.sqlite                     # rank stored Findings by exploitability
+# Compile a target, run inputs, triage crashes, store + rank
+raon run mytarget.c --input seed.bin --input crash.bin --db raon.sqlite
+
+# Parse a saved sanitizer crash log into a Finding (no compiler needed)
+raon triage crash_report.txt --target-id my_target --db raon.sqlite
+
+# Rank all stored findings by exploitability (duplicates collapsed)
+raon report --db raon.sqlite
+
+# List built-in domain knowledge (seeds, weak-interface hints)
+raon kb
 ```
 
-`raon run` compiles the target with ASan, executes the inputs, then parses crashes into
-normalized `Finding`s, stores them on the blackboard, and lets the Supervisor dedup and rank.
+Example `raon run` output:
+
+```json
+{
+  "target": "tgt_cli",
+  "inputs_run": 2,
+  "crashes": 1,
+  "unique_bugs": 1,
+  "findings": [
+    {"id": "find_00001", "category": "memory", "exploitability": 0.95, "dedup_key": "f2b5bb1c1021"}
+  ]
+}
+```
 
 ## Quickstart (Python)
 
 ```python
 from raon.store import Blackboard
 from raon.agents import AgentB, Supervisor
-from raon.knowledge import register_builtins
 
-with Blackboard("raon.sqlite") as bb:
-    register_builtins(bb)                       # load PNG etc. domain knowledge
-
+with Blackboard("raon.sqlite") as store:
+    # Parse a crash report into a normalized finding (high-confidence dynamic crash)
     finding = AgentB().triage(open("crash.txt").read(),
-                              target_id="tgt_x", reproducer="poc.bin")
-    bb.put_finding(finding)
+                              target_id="my_target", reproducer="poc.bin")
+    store.put_finding(finding)
 
-    result = Supervisor().triage(bb.list_findings())   # dedup -> conflict -> rank
+    # Deduplicate, resolve conflicting evidence, rank by exploitability
+    result = Supervisor().triage(store.list_findings())
     for f in result.representatives:
         print(f.category, f.exploitability, f.dedup_key[:12])
 ```
 
-To use the LLM strategy layer (harness synthesis, inference), compose a provider:
+### Enabling the LLM (optional)
+
+Harness synthesis and inference use Claude. Compose a provider once; responses are cached
+(so reruns are reproducible and cheap) and every call is logged for audit and cost tracking:
 
 ```python
 from raon.llm import build_provider, PromptCache, JsonlLogger
 from raon.llm.anthropic_provider import AnthropicProvider
 
 provider = build_provider(
-    AnthropicProvider(),                        # Claude (adaptive thinking + effort)
-    cache=PromptCache(".raon/cache"),           # reproducibility: same prompt -> same response
-    logger=JsonlLogger(".raon/llm.jsonl"),      # audit / cost ledger
+    AnthropicProvider(),                    # reads ANTHROPIC_API_KEY
+    cache=PromptCache(".raon/cache"),       # same prompt -> same response
+    logger=JsonlLogger(".raon/llm.jsonl"),  # audit / cost ledger
 )
 ```
 
----
-
-## Design principles
-
-1. **LLM stays in the strategy layer (never the hot loop).** The fuzzer runs thousands–millions
-   of execs/sec; the LLM runs ~1 call/sec. The fuzzer runs as a native subprocess; the LLM
-   (`raon.llm`) intervenes only in *where / what / how* to hit, on event triggers.
-2. **Don't reimplement existing infrastructure.** ASan/UBSan, AFL++/libFuzzer, angr, Ghidra are
-   proven. raon *assembles, interprets, and connects* them. Novelty is in orchestration/
-   reasoning, not wrapping.
-3. **Vertical slice first.** Thread one target → one harness → one crash → one triage through all
-   three components to prove organic coupling before deepening any tower (see `raon run`, proven
-   by the integration test).
+Everything except harness synthesis and LLM-based reasoning works without an API key.
 
 ---
 
-## Architecture
+## How it works
 
-Every component talks only through the **shared contracts** on the blackboard
-(KnowledgeBase · TargetStore · Corpus · FindingStore, SQLite WAL). This keeps them loosely
-coupled: `fuzzing` never imports `agents` — it speaks only `contracts`/`store`.
+raon runs the fuzzer as a native subprocess for speed and calls the LLM only at decision
+points (writing a harness, summarizing a crash, proposing a fuzzing target) — never inside the
+per-execution loop. Each stage communicates through a small set of shared records on one
+store, so the pieces stay independent and everything a run produces is inspectable.
 
-| Package | Role |
+| Component | What it does |
 |---|---|
-| [`raon.contracts`](src/raon/contracts) | 4 shared contracts (TargetDescriptor · Corpus · Finding · KnowledgeBase), Pydantic, `schema_version` |
-| [`raon.store`](src/raon/store) | Blackboard — SQLite WAL + thread-local connections (many readers / single writer) |
-| [`raon.llm`](src/raon/llm) | Strategy layer — Provider abstraction, model tiering (Haiku/Opus), prompt-hash cache, JSONL logging |
-| [`raon.fuzzing`](src/raon/fuzzing) | Engine (clang+ASan subprocess), sanitizer parser, harness auto-synthesis (self-repair) |
-| [`raon.triage`](src/raon/triage) | dedup normalization/clustering, evidence-weighted conflict resolution, exploitability ranking |
-| [`raon.agents`](src/raon/agents) | Agent A (static) / B (dynamic) / C (inference) + **Supervisor** (orchestration) |
-| [`raon.knowledge`](src/raon/knowledge) | Domain knowledge (PNG, …) — seeds/grammar + Agent C grounds |
-| [`raon.bench`](src/raon/bench) | Magma canary-monitor adapter + core metrics |
-| [`raon.binary`](src/raon/binary) | (P4) crash grounding + LLM type re-recovery |
+| [`raon.fuzzing`](src/raon/fuzzing) | Compiles targets with clang + sanitizers, runs them, parses crash reports, synthesizes harnesses |
+| [`raon.agents`](src/raon/agents) | Interprets crashes, static-analysis results, and weak-interface hypotheses into findings |
+| [`raon.triage`](src/raon/triage) | Deduplicates crashes, weighs evidence, ranks by exploitability |
+| [`raon.store`](src/raon/store) | Shared SQLite store for targets, corpora, and findings (concurrency-safe) |
+| [`raon.llm`](src/raon/llm) | Claude integration with model tiering, response caching, and full logging |
+| [`raon.knowledge`](src/raon/knowledge) | Domain packs (e.g. PNG) providing seeds and weak-interface hints |
+| [`raon.bench`](src/raon/bench) | Reads Magma benchmark ground truth and computes metrics |
+| [`raon.binary`](src/raon/binary) | Maps crash addresses to functions and recovers types for source-less targets (experimental) |
+| [`raon.contracts`](src/raon/contracts) | The shared record types every component reads and writes |
 
-**Data flow (one cycle):** Ingest → Plan (priority, harness synth, seed select) → Explore
-(coverage-guided fuzzing → Corpus + dynamic Finding) → Ground (crash addr → function context,
-when no source) → Reason (static/inference Findings) → Triage (dedup → conflict → exploitability)
-→ Feedback (update priorities, request harnesses, refine seeds) → back to Plan.
+A crash is reported as a **`Finding`**: a category, the evidence (reproducer + sanitizer
+report, or a static path), a confidence, an exploitability score, and a `dedup_key`. The
+`dedup_key` is a normalized stack hash that strips addresses, line numbers, and build paths, so
+the same bug maps to the same key even across rebuilds — that's what lets raon collapse
+duplicate crashes reliably.
 
 ---
 
-## Shared contracts
+## Status
 
-Everything that makes the three components couple organically comes from here:
+**Available now:** source-based C/C++ fuzzing and crash triage, harness auto-synthesis,
+crash deduplication and exploitability ranking, a PNG knowledge pack, Magma metric ingestion,
+and the CLI/Python API above.
 
-| Contract | Meaning |
-|---|---|
-| `TargetDescriptor` | *what* to test (signature · entry path · domain tags · priority) |
-| `Corpus` | *how far* exploration got (seeds · edge coverage · stuck_branches) |
-| `Finding` | one bug candidate (normalized unit; compares heterogeneous evidence in one table) |
-| `KnowledgeBase` | domain dictionary (grammar · seeds · invariants · weak interfaces) |
-
-`Finding.dedup_key = sha1(normalized_stack + category)` — the normalization spec lives in
-[`raon.triage.dedup`](src/raon/triage/dedup.py) and strips address/line/build-path noise so the
-key is stable across rebuilds.
+**Experimental / in progress:** source-less (binary) targets via angr, coverage-guided
+fuzzing at scale, additional domain knowledge packs, and larger evaluation studies. Running
+Magma's full benchmark suite requires an x86_64 Linux host with Docker.
 
 ---
 
@@ -140,39 +159,25 @@ key is stable across rebuilds.
 
 ```bash
 pip install -e '.[dev,llm]'
-ruff check src tests      # lint (auto-fix: ruff check --fix)
+ruff check src tests      # lint
 mypy                      # types (strict)
-pytest -q                 # full suite (integration tests auto-run when clang is present)
+pytest -q                 # full suite (fuzzing tests auto-run when clang is present)
 pytest -q -m "not integration"   # unit only, no clang
-```
 
-Run the full reproducible environment in Docker (Linux clang exercises the libFuzzer path):
-
-```bash
+# full reproducible environment (Linux clang + libFuzzer):
 docker build -f docker/Dockerfile -t raon:ci . && docker run --rm raon:ci
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [examples/](examples/) for a runnable
-end-to-end demo.
-
----
-
-## Roadmap
-
-| Phase | Status | Content |
-|---|---|---|
-| **P0** contracts + bench | ✅ | 4 schemas · blackboard · LLM abstraction · Magma monitor adapter |
-| **P1** vertical slice v0 | ✅ | compile → crash → parse → Finding → store → rank (real clang e2e) |
-| **P2** fuzzing depth | 🚧 | harness auto-synth + self-repair ✅ · seed priming / stuck-escape ⏳ |
-| **P3** orchestration depth | 🚧 | dedup2 · conflict resolution · ranking ✅ · single-vs-multi experiment ⏳ |
-| **P4** binary extension | 🚧 | grounding · LLM re-typing ✅ · Ghidra · self-benchmark ⏳ |
+See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and [examples/](examples/) for a
+runnable end-to-end demo.
 
 ---
 
 ## Security & ethics
 
-raon is a vulnerability-discovery tool. See [POLICY.md](POLICY.md) for authorized-use,
-responsible-disclosure, and reproducibility policy.
+raon is a vulnerability-discovery tool for **authorized use only**. Read [POLICY.md](POLICY.md)
+for authorized-use, responsible-disclosure, and reproducibility guidance before pointing it at
+anything you don't own.
 
 ## License
 
