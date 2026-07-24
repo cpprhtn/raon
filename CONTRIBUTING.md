@@ -48,6 +48,22 @@ pytest -q                 # 전체 테스트
 - 커밋 메시지는 무엇을·왜를 명확히 적어주세요.
 - 보안 도구 특성상 [POLICY.md](POLICY.md)의 권한·공개 규약을 준수하세요.
 
+## 릴리스 (메인테이너)
+
+버전은 `src/raon/__init__.py`의 `__version__` 한 곳에서만 올립니다(pyproject가 동적으로 읽음).
+배포는 스크립트로 하며, 토큰은 `.env`에서 읽습니다(절대 커밋되지 않음).
+
+```bash
+cp .env.example .env         # 최초 1회, PYPI_TOKEN 입력
+scripts/publish.sh --dry-run # 빌드 + 검증만
+scripts/publish.sh --test    # TestPyPI 업로드
+scripts/publish.sh           # PyPI 업로드
+```
+
+PyPI는 한 번 올린 버전을 재사용할 수 없으니, 업로드 전 `__version__`을 반드시 올리세요.
+
+## 취약점 신고
+
 ## 취약점 신고
 
 raon **자체**의 보안 이슈는 공개 이슈 대신 메인테이너에게 비공개로 알려주세요.

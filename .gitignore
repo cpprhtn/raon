@@ -36,6 +36,11 @@ ENV/
 *.tar.gz
 .pypirc
 
+# Secrets — never commit. .env holds tokens (PyPI, etc.); only the example is tracked.
+.env
+.env.*
+!.env.example
+
 # Testing / coverage
 .pytest_cache/
 .coverage
