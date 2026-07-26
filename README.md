@@ -1,10 +1,12 @@
 # raon
 
-raon is a research framework for LLM-assisted vulnerability discovery. It compiles C/C++
+raon is a research framework for LLM-assisted vulnerability discovery in C/C++. It compiles
 targets, fuzzes them under sanitizers, and normalizes, deduplicates, and ranks the resulting
-crashes into structured findings. Language models are used to synthesize fuzzing harnesses and
-reason about findings, but never run inside the per-execution loop. raon orchestrates
-established tools — clang/AddressSanitizer, libFuzzer, angr — rather than reimplementing them.
+crashes into structured findings using a small set of cooperating agents. Language models are
+used to synthesize fuzzing harnesses and reason about findings, but never run inside the
+per-execution loop. raon orchestrates established tools — clang/AddressSanitizer, libFuzzer —
+rather than reimplementing them. Source-less (binary) analysis via angr is included but
+experimental.
 
 [![CI](https://github.com/cpprhtn/raon/actions/workflows/ci.yml/badge.svg)](https://github.com/cpprhtn/raon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -14,9 +16,15 @@ English | [한국어](README.ko.md) | [中文](README.zh.md)
 
 ## Status
 
-raon is in early development (pre-alpha); its API may change without notice. It is intended for
-security research, capture-the-flag exercises, and authorized testing only. Please read
-[POLICY.md](POLICY.md) before use.
+raon is in early development (pre-alpha); its API may change without notice, so pin a version
+(`pip install "raon==0.1.0"`) if you depend on it. It is intended for security research,
+capture-the-flag exercises, and authorized testing only. Please read [POLICY.md](POLICY.md)
+before use.
+
+Published benchmark numbers are not available yet: the Magma benchmark integration exists
+(see [Benchmarking](#benchmarking)), but full campaigns have not been run, so no reproduction
+rate or bug counts are reported here. Producing real benchmark results is the top priority for
+the next release.
 
 ## Features
 
@@ -46,6 +54,9 @@ pip install 'raon[llm]'          # with the Claude provider
 pip install 'raon[binary]'       # with angr/LIEF for source-less targets (experimental)
 pip install 'raon[dev]'          # with development tools
 ```
+
+Because the API may change during pre-alpha, pin the version for reproducible installs:
+`pip install "raon==0.1.0"`.
 
 ## Usage
 
@@ -116,6 +127,47 @@ artifact a run produces can be inspected.
 A crash is represented as a `Finding`: a category, its evidence, a confidence, an
 exploitability score, and a `dedup_key`. The `dedup_key` is a normalized stack hash that omits
 addresses, line numbers, and build paths, so the same bug maps to the same key across rebuilds.
+
+### Agents
+
+"Multi-agent" here means three focused agents plus a supervisor, coordinating through the shared
+store rather than by calling each other directly. Each agent produces `Finding`s; the supervisor
+merges them. The static and inference agents are optional and require their respective tools.
+
+| Agent | Role | Evidence produced |
+|---|---|---|
+| `AgentA` | Static analysis (runs Semgrep, interprets results) | static path, medium confidence |
+| `AgentB` | Crash triage — parses sanitizer output from a run | dynamic crash, high confidence |
+| `AgentC` | Interface inference from domain knowledge (weak-interface hypotheses) | inference, low confidence |
+| `Supervisor` | Orchestration — deduplicates, weighs evidence across agents, ranks by exploitability | merged, ranked findings |
+
+Evidence is weighted by kind (a reproducible dynamic crash outranks a static path, which
+outranks an inference), so a confirmed crash dominates a speculative one for the same bug. The
+quickstart above shows only `AgentB` + `Supervisor` for brevity; `AgentA`/`AgentC` follow the
+same interface. (These names are slated to become role-based in a future release — see
+[CHANGELOG.md](CHANGELOG.md).)
+
+## Platform support
+
+| Platform | ASan fuzzing (`raon run`) | Coverage-guided fuzzing (libFuzzer) | Triage / Python API / CLI |
+|---|---|---|---|
+| Linux (x86_64) | ✅ | ✅ | ✅ |
+| macOS (Apple clang) | ✅ | ❌ (no libFuzzer runtime) | ✅ |
+| Windows | ⚠️ untested (use WSL) | ⚠️ untested (use WSL) | ✅ |
+| Docker (provided image) | ✅ | ✅ | ✅ |
+
+`raon run` and integration tests need **clang with AddressSanitizer**. Coverage-guided fuzzing
+additionally needs the **libFuzzer runtime**, which ships with Linux clang but not Apple clang;
+the provided `docker/Dockerfile` gives a Linux environment with both. Triage, the Python API,
+and the CLI work anywhere Python 3.10+ runs.
+
+## Benchmarking
+
+raon includes an adapter (`raon.bench`) that reads the [Magma](https://github.com/HexHive/magma)
+benchmark's canary ground truth and computes metrics — deduplication accuracy, false-positive
+rate, time-to-first-crash, and cost per unique bug. Running Magma's campaigns requires an x86_64
+Linux host with Docker. Published results are not available yet; generating them is the next
+release's priority, and no reproduction rates or bug counts are claimed until then.
 
 ## Documentation
 

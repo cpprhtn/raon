@@ -1,9 +1,10 @@
 # raon
 
-raon 是一个用于 LLM 辅助漏洞发现的研究框架。它编译 C/C++ 目标，在 sanitizer 下进行模糊测试，
-并将由此产生的崩溃规范化、去重并排序为结构化的 finding。语言模型用于合成模糊测试 harness 以及
-对 finding 进行推理，但绝不运行于逐次执行的循环之内。raon 编排成熟工具（clang/AddressSanitizer、
-libFuzzer、angr），而非重新实现它们。
+raon 是一个用于 C/C++ 的 LLM 辅助漏洞发现研究框架。它编译目标，在 sanitizer 下进行模糊测试，
+并用一小组相互协作的智能体将由此产生的崩溃规范化、去重并排序为结构化的 finding。语言模型用于
+合成模糊测试 harness 以及对 finding 进行推理，但绝不运行于逐次执行的循环之内。raon 编排成熟
+工具（clang/AddressSanitizer、libFuzzer），而非重新实现它们。基于 angr 的无源码（二进制）分析
+也已包含，但仍处于实验阶段。
 
 [![CI](https://github.com/cpprhtn/raon/actions/workflows/ci.yml/badge.svg)](https://github.com/cpprhtn/raon/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -13,8 +14,12 @@ libFuzzer、angr），而非重新实现它们。
 
 ## 状态
 
-raon 处于早期开发阶段（pre-alpha），其 API 可能在没有通知的情况下变更。仅供安全研究、
-夺旗赛（CTF）和经授权的测试使用。使用前请阅读 [POLICY.md](POLICY.md)。
+raon 处于早期开发阶段（pre-alpha），其 API 可能在没有通知的情况下变更；如有依赖，请固定版本
+（`pip install "raon==0.1.0"`）。仅供安全研究、夺旗赛（CTF）和经授权的测试使用。使用前请阅读
+[POLICY.md](POLICY.md)。
+
+目前**尚无公开的基准数据**：Magma 基准的集成（适配器）已具备（见[基准测试](#基准测试)），但尚未
+运行完整的活动，因此不报告任何复现率或 bug 数量。生成真实的基准结果是下一个版本的首要任务。
 
 ## 功能
 
@@ -41,6 +46,8 @@ pip install 'raon[llm]'          # 含 Claude provider
 pip install 'raon[binary]'       # 含用于无源码目标的 angr/LIEF（实验性）
 pip install 'raon[dev]'          # 含开发工具
 ```
+
+由于 pre-alpha 期间 API 可能变更，请固定版本以获得可复现的安装：`pip install "raon==0.1.0"`。
 
 ## 使用
 
@@ -107,6 +114,42 @@ raon 将模糊器作为原生子进程运行，仅在决策点（编写 harness�
 
 崩溃以 `Finding` 表示：类别、证据、置信度、exploitability 分数，以及 `dedup_key`。`dedup_key`
 是省略了地址、行号和构建路径的规范化栈哈希，因此同一 bug 在重新构建后仍映射到同一键。
+
+### 智能体
+
+此处的“多智能体”指三个专职智能体加一个 supervisor，它们不直接互相调用，而是通过共享存储协作。
+每个智能体产出 `Finding`，由 supervisor 合并。静态与推理智能体是可选的，需要各自的工具。
+
+| 智能体 | 职责 | 产出证据 |
+|---|---|---|
+| `AgentA` | 静态分析（运行 Semgrep 并解释结果） | static path，中等置信度 |
+| `AgentB` | 崩溃 triage——解析运行产生的 sanitizer 输出 | dynamic crash，高置信度 |
+| `AgentC` | 基于领域知识的脆弱接口推理 | inference，低置信度 |
+| `Supervisor` | 编排——去重、跨智能体加权证据、按 exploitability 排序 | 合并并排序后的 finding |
+
+证据按种类加权（可复现的动态崩溃 > static path > 推理），因此对同一 bug，已确证的崩溃会压过
+推测性结果。上面的快速开始为简洁起见只展示了 `AgentB` + `Supervisor`；`AgentA`/`AgentC` 遵循
+相同接口。（这些名称将在未来版本改为基于角色的命名——见 [CHANGELOG.md](CHANGELOG.md)。）
+
+## 平台支持
+
+| 平台 | ASan 模糊测试（`raon run`） | 覆盖率引导模糊测试（libFuzzer） | Triage / Python API / CLI |
+|---|---|---|---|
+| Linux (x86_64) | ✅ | ✅ | ✅ |
+| macOS (Apple clang) | ✅ | ❌（无 libFuzzer 运行时） | ✅ |
+| Windows | ⚠️ 未测试（建议 WSL） | ⚠️ 未测试（建议 WSL） | ✅ |
+| Docker（提供的镜像） | ✅ | ✅ | ✅ |
+
+`raon run` 与集成测试需要**含 AddressSanitizer 的 clang**。覆盖率引导模糊测试还需要 **libFuzzer
+运行时**，它随 Linux clang 提供，但 Apple clang 没有；提供的 `docker/Dockerfile` 给出同时具备两者
+的 Linux 环境。Triage、Python API 和 CLI 在任何可运行 Python 3.10+ 的地方均可工作。
+
+## 基准测试
+
+raon 包含一个适配器（`raon.bench`），用于读取 [Magma](https://github.com/HexHive/magma) 基准的
+canary ground truth 并计算指标——去重准确率、误报率、time-to-first-crash 以及每个唯一 bug 的成本。
+运行 Magma 活动需要 x86_64 Linux 主机 + Docker。目前尚无公开结果，生成结果是下一个版本的首要
+任务；在获得实测数据前，不声称任何复现率或 bug 数量。
 
 ## 文档
 
