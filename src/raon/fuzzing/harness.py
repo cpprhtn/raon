@@ -16,6 +16,7 @@ from pathlib import Path
 from raon.contracts import TargetDescriptor
 from raon.llm import LLMRequest, Message, ModelTier, Provider
 
+from .coverage import compile_with_coverage, coverage_available, function_reached
 from .engine import CompiledHarness, CompileError, HarnessMode, compile_harness
 
 _CODE_FENCE_RE = re.compile(r"```(?:c|cpp|c\+\+)?\s*(.*?)```", re.DOTALL)
@@ -23,11 +24,15 @@ _CODE_FENCE_RE = re.compile(r"```(?:c|cpp|c\+\+)?\s*(.*?)```", re.DOTALL)
 
 @dataclass
 class SynthAttempt:
-    """합성 시도 하나의 기록(재현성·분석용)."""
+    """합성 시도 하나의 기록(재현성·분석용).
+
+    reached: 도달 검증 결과 (True=타겟 실행 확인, False=미도달, None=검증 안 함/불가).
+    """
 
     code: str
     compiled: bool
     error: str | None = None
+    reached: bool | None = None
 
 
 @dataclass
@@ -112,6 +117,13 @@ class HarnessSynthesizer:
             f"[이전 코드]\n{code}\n\n[컴파일러 에러]\n{error}\n\n코드만 출력하라."
         )
 
+    def _reach_repair_prompt(self, code: str, entry: str) -> str:
+        return (
+            f"하네스가 컴파일은 됐지만 입력을 처리해도 타겟 함수 `{entry}` 가 실행되지 않았다. "
+            f"입력을 실제로 `{entry}` 에 전달해 호출하도록 고쳐서 완전한 C 코드를 다시 출력하라.\n\n"
+            f"[이전 코드]\n{code}\n\n코드만 출력하라."
+        )
+
     def _ask(self, prompt: str) -> str:
         messages: list[Message] = [{"role": "user", "content": prompt}]
         resp = self._provider.complete(
@@ -132,14 +144,21 @@ class HarnessSynthesizer:
         *,
         out: str | Path,
         workdir: str | Path | None = None,
+        verify_reach: bool = False,
+        reach_seed: bytes = b"\x00\x00\x00\x00",
     ) -> SynthResult:
         """하네스를 합성·컴파일하고 self-repair로 재시도. SynthResult 반환.
 
         target_source는 타겟 함수 정의를 담은 소스(main 없음). 합성된 드라이버와 함께 컴파일된다.
+
+        verify_reach=True 이면 컴파일 성공 후 **도달 검증**까지 수행한다(FILE_ARG + coverage 도구
+        필요). 컴파일은 됐지만 타겟 미도달이면 reach-repair 프롬프트로 재합성한다. 도구가 없으면
+        (reached=None) 검증을 건너뛰고 컴파일 성공만으로 수락한다(우아한 후퇴).
         """
         work = Path(workdir) if workdir else Path(out).parent
         work.mkdir(parents=True, exist_ok=True)
         driver_path = work / "harness_driver.c"
+        entry = _entry_name(target)
 
         code = self._ask(self._initial_prompt(target))
         attempts: list[SynthAttempt] = []
@@ -147,15 +166,46 @@ class HarnessSynthesizer:
         for _ in range(self._max_repairs + 1):
             driver_path.write_text(code, encoding="utf-8")
             try:
-                harness = compile_harness(
-                    [driver_path, target_source], out, mode=self._mode
-                )
-                attempts.append(SynthAttempt(code=code, compiled=True))
-                return SynthResult(ok=True, harness=harness, code=code, attempts=attempts)
+                harness = compile_harness([driver_path, target_source], out, mode=self._mode)
             except CompileError as e:
                 error = str(e)
                 attempts.append(SynthAttempt(code=code, compiled=False, error=error))
-                # self-repair: 에러를 피드백해 재합성
                 code = self._ask(self._repair_prompt(code, error))
+                continue
+
+            reached = self._verify_reach(
+                target, target_source, driver_path, work, entry, reach_seed
+            ) if verify_reach else None
+
+            if reached is False:
+                # 컴파일 OK지만 타겟 미도달 → reach-repair
+                attempts.append(SynthAttempt(code=code, compiled=True, reached=False))
+                code = self._ask(self._reach_repair_prompt(code, entry))
+                continue
+
+            attempts.append(SynthAttempt(code=code, compiled=True, reached=reached))
+            return SynthResult(ok=True, harness=harness, code=code, attempts=attempts)
 
         return SynthResult(ok=False, harness=None, code=code, attempts=attempts)
+
+    def _verify_reach(
+        self,
+        target: TargetDescriptor,
+        target_source: str | Path,
+        driver_path: Path,
+        work: Path,
+        entry: str,
+        reach_seed: bytes,
+    ) -> bool | None:
+        """coverage 계측 빌드로 타겟 도달 여부 판정. FILE_ARG에서만. 도구 없으면 None."""
+        if self._mode != HarnessMode.FILE_ARG or not coverage_available():
+            return None
+        try:
+            cov_harness = compile_with_coverage(
+                [driver_path, target_source], work / "h_cov"
+            )
+        except CompileError:
+            return None
+        seed_path = work / "reach_seed.bin"
+        seed_path.write_bytes(reach_seed)
+        return function_reached(cov_harness, seed_path, entry).reached
