@@ -83,10 +83,13 @@ if [[ -z "$TOKEN" ]]; then
 fi
 
 echo ">> uploading to $REPO"
-TWINE_ARGS=()
-[[ "$REPO" == "testpypi" ]] && TWINE_ARGS+=(--repository testpypi)
-
-TWINE_USERNAME="__token__" TWINE_PASSWORD="$TOKEN" \
-  "$PY" -m twine upload "${TWINE_ARGS[@]}" dist/*
+# Avoid empty-array expansion under `set -u` (breaks on macOS's bash 3.2).
+if [[ "$REPO" == "testpypi" ]]; then
+  TWINE_USERNAME="__token__" TWINE_PASSWORD="$TOKEN" \
+    "$PY" -m twine upload --repository testpypi dist/*
+else
+  TWINE_USERNAME="__token__" TWINE_PASSWORD="$TOKEN" \
+    "$PY" -m twine upload dist/*
+fi
 
 echo ">> done."
