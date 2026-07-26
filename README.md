@@ -21,10 +21,10 @@ raon is in early development (pre-alpha); its API may change without notice, so 
 capture-the-flag exercises, and authorized testing only. Please read [POLICY.md](POLICY.md)
 before use.
 
-Published benchmark numbers are not available yet: the Magma benchmark integration exists
-(see [Benchmarking](#benchmarking)), but full campaigns have not been run, so no reproduction
-rate or bug counts are reported here. Producing real benchmark results is the top priority for
-the next release.
+A self-contained evaluation shows raon detecting and correctly classifying several memory-bug
+classes end to end (see [Benchmarking](#benchmarking)). Known-CVE reproduction via the Magma
+benchmark (which needs an x86_64 Linux host) has not been run yet; no CVE-reproduction rates
+are claimed until it is.
 
 ## Features
 
@@ -163,11 +163,26 @@ and the CLI work anywhere Python 3.10+ runs.
 
 ## Benchmarking
 
-raon includes an adapter (`raon.bench`) that reads the [Magma](https://github.com/HexHive/magma)
-benchmark's canary ground truth and computes metrics — deduplication accuracy, false-positive
-rate, time-to-first-crash, and cost per unique bug. Running Magma's campaigns requires an x86_64
-Linux host with Docker. Published results are not available yet; generating them is the next
-release's priority, and no reproduction rates or bug counts are claimed until then.
+**Self-contained evaluation.** raon ships a small benchmark of libFuzzer targets with planted
+bugs (plus a safe target as a false-positive check) and runs the full pipeline against them.
+Measured results (raon 0.2.0, Docker image):
+
+| Target | Bug class | Detected | Sanitizer error | Time to crash (s) |
+|---|---|---|---|---|
+| `heap_overflow.c` | memory | ✅ | heap-buffer-overflow | 0.04 |
+| `use_after_free.c` | memory | ✅ | heap-use-after-free | 0.03 |
+| `stack_overflow.c` | memory | ✅ | stack-buffer-overflow | 0.03 |
+| `global_overflow.c` | memory | ✅ | global-buffer-overflow | 0.03 |
+| `safe.c` | — (safe) | no crash ✓ | — | — |
+
+4/4 buggy targets detected, 0 false positives. Reproduce with
+`docker run --rm raon:ci python -m raon.bench.eval`. Details and methodology:
+[docs/evaluation.md](docs/evaluation.md).
+
+**Magma (planned).** raon also includes an adapter (`raon.bench`) that reads the
+[Magma](https://github.com/HexHive/magma) benchmark's canary ground truth for known-CVE
+reproduction metrics. Running those campaigns requires an x86_64 Linux host with Docker; results
+will be published once a campaign has run. No CVE-reproduction rates are claimed until then.
 
 ## Documentation
 

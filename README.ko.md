@@ -19,9 +19,9 @@ raon은 초기 개발 단계(pre-alpha)이며 API가 예고 없이 바뀔 수 �
 고정하세요(`pip install "raon==0.1.0"`). 보안 연구, CTF, 권한 있는 테스트 용도로만 사용하십시오.
 사용 전 [POLICY.md](POLICY.md)를 읽어주세요.
 
-아직 **공개된 벤치마크 수치는 없습니다**: Magma 벤치마크 연동(어댑터)은 있으나([벤치마크](#벤치마크)
-참고) 실제 캠페인을 돌리지 않았으므로 재현율이나 버그 수를 보고하지 않습니다. 실제 벤치마크
-결과 생성이 다음 릴리스의 최우선 과제입니다.
+자체 평가에서 raon이 여러 메모리 버그 클래스를 end-to-end로 탐지·분류함을 보입니다
+([벤치마크](#벤치마크) 참고). Magma 기반 알려진 CVE 재현(x86_64 Linux 호스트 필요)은 아직
+돌리지 않았으며, 돌리기 전까지 CVE 재현율은 주장하지 않습니다.
 
 ## 기능
 
@@ -156,11 +156,24 @@ Python 3.10+가 도는 곳이면 어디서나 동작합니다.
 
 ## 벤치마크
 
-raon은 [Magma](https://github.com/HexHive/magma) 벤치마크의 canary ground truth를 읽어 지표
-(중복제거 정확도, false-positive 비율, time-to-first-crash, 유니크 버그당 비용)를 계산하는
-어댑터(`raon.bench`)를 포함합니다. Magma 캠페인 실행에는 x86_64 Linux 호스트 + Docker가
-필요합니다. 아직 공개된 결과는 없으며, 이를 생성하는 것이 다음 릴리스의 최우선 과제입니다.
-실측 전까지 어떤 재현율이나 버그 수도 주장하지 않습니다.
+**자체 평가.** raon은 버그를 심은 libFuzzer 타겟 모음(+ 오탐 점검용 안전 타겟)을 번들하고
+전체 파이프라인을 돌립니다. 실측 결과(raon 0.2.0, Docker 이미지):
+
+| 타겟 | 버그 클래스 | 탐지 | Sanitizer 오류 | 크래시까지(s) |
+|---|---|---|---|---|
+| `heap_overflow.c` | memory | ✅ | heap-buffer-overflow | 0.04 |
+| `use_after_free.c` | memory | ✅ | heap-use-after-free | 0.03 |
+| `stack_overflow.c` | memory | ✅ | stack-buffer-overflow | 0.03 |
+| `global_overflow.c` | memory | ✅ | global-buffer-overflow | 0.03 |
+| `safe.c` | — (safe) | no crash ✓ | — | — |
+
+버그 타겟 4/4 탐지, 오탐 0. 재현: `docker run --rm raon:ci python -m raon.bench.eval`.
+방법론 상세: [docs/evaluation.md](docs/evaluation.md).
+
+**Magma (예정).** raon은 [Magma](https://github.com/HexHive/magma) 벤치마크의 canary ground
+truth를 읽어 알려진 CVE 재현 지표를 계산하는 어댑터(`raon.bench`)도 포함합니다. 이 캠페인 실행에는
+x86_64 Linux 호스트 + Docker가 필요하며, 캠페인을 돌린 뒤 결과를 공개합니다. 그전까지 어떤 CVE
+재현율도 주장하지 않습니다.
 
 ## 문서
 

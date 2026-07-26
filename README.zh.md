@@ -18,8 +18,8 @@ raon 处于早期开发阶段（pre-alpha），其 API 可能在没有通知的�
 （`pip install "raon==0.1.0"`）。仅供安全研究、夺旗赛（CTF）和经授权的测试使用。使用前请阅读
 [POLICY.md](POLICY.md)。
 
-目前**尚无公开的基准数据**：Magma 基准的集成（适配器）已具备（见[基准测试](#基准测试)），但尚未
-运行完整的活动，因此不报告任何复现率或 bug 数量。生成真实的基准结果是下一个版本的首要任务。
+自包含评测显示 raon 能端到端地检测并正确分类多种内存 bug（见[基准测试](#基准测试)）。基于 Magma
+的已知 CVE 复现（需要 x86_64 Linux 主机）尚未运行；在运行之前不声称任何 CVE 复现率。
 
 ## 功能
 
@@ -146,10 +146,24 @@ raon 将模糊器作为原生子进程运行，仅在决策点（编写 harness�
 
 ## 基准测试
 
-raon 包含一个适配器（`raon.bench`），用于读取 [Magma](https://github.com/HexHive/magma) 基准的
-canary ground truth 并计算指标——去重准确率、误报率、time-to-first-crash 以及每个唯一 bug 的成本。
-运行 Magma 活动需要 x86_64 Linux 主机 + Docker。目前尚无公开结果，生成结果是下一个版本的首要
-任务；在获得实测数据前，不声称任何复现率或 bug 数量。
+**自包含评测。** raon 附带一组带有植入 bug 的 libFuzzer 目标（以及一个用于误报检查的安全目标），
+并对其运行完整流水线。实测结果（raon 0.2.0，Docker 镜像）：
+
+| 目标 | Bug 类别 | 检出 | Sanitizer 错误 | 崩溃用时(s) |
+|---|---|---|---|---|
+| `heap_overflow.c` | memory | ✅ | heap-buffer-overflow | 0.04 |
+| `use_after_free.c` | memory | ✅ | heap-use-after-free | 0.03 |
+| `stack_overflow.c` | memory | ✅ | stack-buffer-overflow | 0.03 |
+| `global_overflow.c` | memory | ✅ | global-buffer-overflow | 0.03 |
+| `safe.c` | — (safe) | 无崩溃 ✓ | — | — |
+
+4/4 个 bug 目标被检出，0 误报。复现：`docker run --rm raon:ci python -m raon.bench.eval`。
+方法与细节：[docs/evaluation.md](docs/evaluation.md)。
+
+**Magma（计划中）。** raon 还包含一个适配器（`raon.bench`），用于读取
+[Magma](https://github.com/HexHive/magma) 基准的 canary ground truth 以计算已知 CVE 复现指标。
+运行这些活动需要 x86_64 Linux 主机 + Docker；在运行一次活动后会公布结果。在此之前不声称任何 CVE
+复现率。
 
 ## 文档
 

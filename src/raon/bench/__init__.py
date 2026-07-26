@@ -16,10 +16,16 @@ from .metrics import (
     unique_bug_count,
 )
 
+# The self-contained evaluation is a runnable tool: `python -m raon.bench.eval`
+# or `from raon.bench.eval import run_eval`. It is intentionally not eagerly
+# imported here (keeps `raon.bench` light and avoids a runpy re-import warning).
+
 __all__ = [
+    # Magma
     "MagmaCampaign",
     "parse_monitor_dir",
     "parse_monitor_row",
+    # metrics
     "ClusterEval",
     "dedup_accuracy",
     "false_positive_rate",
