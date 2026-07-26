@@ -22,9 +22,8 @@ capture-the-flag exercises, and authorized testing only. Please read [POLICY.md]
 before use.
 
 A self-contained evaluation shows raon detecting and correctly classifying several memory-bug
-classes end to end (see [Benchmarking](#benchmarking)). Known-CVE reproduction via the Magma
-benchmark (which needs an x86_64 Linux host) has not been run yet; no CVE-reproduction rates
-are claimed until it is.
+classes end to end, and a real Magma campaign (front-ported CVEs) reached 6 and triggered 2
+canary bugs in libpng within 10 minutes (see [Benchmarking](#benchmarking)).
 
 ## Features
 
@@ -184,10 +183,11 @@ vary with ASLR), a naive single-pass baseline over-reports 4 bugs as 12 (dedup F
 normalized dedup + Supervisor recovers exactly 4 (F1 1.00). Reproduce with
 `python -m raon.bench.experiment`.
 
-**Magma (planned).** raon also includes an adapter (`raon.bench`) that reads the
-[Magma](https://github.com/HexHive/magma) benchmark's canary ground truth for known-CVE
-reproduction metrics. Running those campaigns requires an x86_64 Linux host with Docker; results
-will be published once a campaign has run. No CVE-reproduction rates are claimed until then.
+**Magma (real CVEs).** raon reads the [Magma](https://github.com/HexHive/magma) benchmark's
+canary ground truth via `raon.bench`. A 10-minute stock-libFuzzer campaign on libpng (x86_64 CI)
+**reached 6 and triggered 2** of the front-ported CVE canaries (first trigger at 15s). Magma
+needs an x86_64 Linux host, so this runs via the `magma.yml` GitHub Actions workflow; a longer
+campaign triggers more. Details: [docs/evaluation.md](docs/evaluation.md).
 
 ## Documentation
 

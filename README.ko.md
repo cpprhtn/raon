@@ -19,9 +19,9 @@ raon은 초기 개발 단계(pre-alpha)이며 API가 예고 없이 바뀔 수 �
 고정하세요(`pip install "raon==0.1.0"`). 보안 연구, CTF, 권한 있는 테스트 용도로만 사용하십시오.
 사용 전 [POLICY.md](POLICY.md)를 읽어주세요.
 
-자체 평가에서 raon이 여러 메모리 버그 클래스를 end-to-end로 탐지·분류함을 보입니다
-([벤치마크](#벤치마크) 참고). Magma 기반 알려진 CVE 재현(x86_64 Linux 호스트 필요)은 아직
-돌리지 않았으며, 돌리기 전까지 CVE 재현율은 주장하지 않습니다.
+자체 평가에서 raon이 여러 메모리 버그 클래스를 end-to-end로 탐지·분류하고, 실제 Magma 캠페인
+(front-port된 CVE)에서 10분 만에 libpng canary 버그 **6개 도달·2개 트리거**를 달성했습니다
+([벤치마크](#벤치마크) 참고).
 
 ## 기능
 
@@ -174,10 +174,11 @@ Python 3.10+가 도는 곳이면 어디서나 동작합니다.
 달라지는데, 순진한 단일 dedup은 버그 4개를 12개로 과다계수(dedup F1 0.00)하고, raon의 정규화
 dedup + Supervisor는 정확히 4개로 합칩니다(F1 1.00). 재현: `python -m raon.bench.experiment`.
 
-**Magma (예정).** raon은 [Magma](https://github.com/HexHive/magma) 벤치마크의 canary ground
-truth를 읽어 알려진 CVE 재현 지표를 계산하는 어댑터(`raon.bench`)도 포함합니다. 이 캠페인 실행에는
-x86_64 Linux 호스트 + Docker가 필요하며, 캠페인을 돌린 뒤 결과를 공개합니다. 그전까지 어떤 CVE
-재현율도 주장하지 않습니다.
+**Magma (실제 CVE).** raon은 [Magma](https://github.com/HexHive/magma) 벤치마크의 canary ground
+truth를 `raon.bench`로 읽습니다. libpng 대상 10분 stock-libFuzzer 캠페인(x86_64 CI)에서
+front-port된 CVE canary **6개 도달·2개 트리거**(첫 트리거 15초)를 기록했습니다. Magma는 x86_64
+Linux 호스트가 필요해 `magma.yml` GitHub Actions 워크플로우로 돌립니다. 더 길게 돌리면 더 많이
+트리거됩니다. 상세: [docs/evaluation.md](docs/evaluation.md).
 
 ## 문서
 

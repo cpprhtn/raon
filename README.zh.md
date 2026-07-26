@@ -18,8 +18,8 @@ raon 处于早期开发阶段（pre-alpha），其 API 可能在没有通知的�
 （`pip install "raon==0.1.0"`）。仅供安全研究、夺旗赛（CTF）和经授权的测试使用。使用前请阅读
 [POLICY.md](POLICY.md)。
 
-自包含评测显示 raon 能端到端地检测并正确分类多种内存 bug（见[基准测试](#基准测试)）。基于 Magma
-的已知 CVE 复现（需要 x86_64 Linux 主机）尚未运行；在运行之前不声称任何 CVE 复现率。
+自包含评测显示 raon 能端到端地检测并正确分类多种内存 bug；一次真实的 Magma 活动（前移的 CVE）
+在 10 分钟内于 libpng 上 **到达 6 个、触发 2 个** canary bug（见[基准测试](#基准测试)）。
 
 ## 功能
 
@@ -164,10 +164,11 @@ raon 将模糊器作为原生子进程运行，仅在决策点（编写 harness�
 去重把 4 个 bug 过度上报为 12 个（去重 F1 0.00），而 raon 的规范化去重 + Supervisor 恰好合并为
 4 个（F1 1.00）。复现：`python -m raon.bench.experiment`。
 
-**Magma（计划中）。** raon 还包含一个适配器（`raon.bench`），用于读取
-[Magma](https://github.com/HexHive/magma) 基准的 canary ground truth 以计算已知 CVE 复现指标。
-运行这些活动需要 x86_64 Linux 主机 + Docker；在运行一次活动后会公布结果。在此之前不声称任何 CVE
-复现率。
+**Magma（真实 CVE）。** raon 通过 `raon.bench` 读取 [Magma](https://github.com/HexHive/magma)
+基准的 canary ground truth。在 libpng 上进行的 10 分钟 stock-libFuzzer 活动（x86_64 CI）**到达 6
+个、触发 2 个**前移的 CVE canary（首次触发 15 秒）。Magma 需要 x86_64 Linux 主机，因此通过
+`magma.yml` GitHub Actions 工作流运行；活动时间更长会触发更多。详见
+[docs/evaluation.md](docs/evaluation.md)。
 
 ## 文档
 

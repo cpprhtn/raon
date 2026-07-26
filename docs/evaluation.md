@@ -77,15 +77,24 @@ Reproduce (needs clang with ASan; runs on macOS or Linux):
 python -m raon.bench.experiment
 ```
 
-## Magma (planned)
+## Magma (real ground truth)
 
 raon is an analysis layer, not a fuzzer, so it runs on top of Magma's stock fuzzers rather than
 shipping its own. It reads Magma's canary `monitor` output as ground truth via `raon.bench`
-(per-bug reached/triggered, time-to-first-crash). Running the campaigns requires an **x86_64
-Linux host with Docker** (Magma has no arm64 support, so it cannot run on Apple Silicon locally).
+(per-bug **reached** = the buggy code executed, **triggered** = the vulnerability condition was
+actually satisfied). Magma requires an **x86_64 Linux host with Docker** (no arm64 support), so
+these numbers come from the **Magma GitHub Actions workflow** (`.github/workflows/magma.yml`) on
+an x86_64 runner.
 
-To produce real numbers on x86_64 without such a host, use the **Magma GitHub Actions workflow**
-(`.github/workflows/magma.yml`): trigger it from the Actions tab (`workflow_dispatch`). It builds
-a Magma target with a stock fuzzer (libfuzzer by default), runs a bounded campaign on an x86_64
-runner, parses the ground truth with `raon.bench`, and uploads the results. Numbers will be added
-here once a campaign has been run; none are claimed until then.
+Measured — libpng (`libpng_read_fuzzer`), stock libFuzzer, **10-minute** campaign:
+
+| Metric | Value |
+|---|---|
+| Canary bugs reached | 6 — PNG001, PNG003, PNG004, PNG005, PNG006, PNG007 |
+| Canary bugs triggered | 2 — PNG003 (15s), PNG006 (20s) |
+| Time to first trigger | 15s |
+
+This is a short smoke campaign (10 minutes); a longer run triggers more bugs. It confirms the
+full pipeline end to end on real, front-ported CVEs: Magma's canaries → `raon.bench` ground-truth
+metrics. Reproduce by dispatching the Magma workflow from the Actions tab (adjust `timeout` for a
+longer campaign).
