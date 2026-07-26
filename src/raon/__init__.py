@@ -11,4 +11,4 @@
 공개 API는 `raon.contracts`(공유 계약)를 중심으로 구성된다.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

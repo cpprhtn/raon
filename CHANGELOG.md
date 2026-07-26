@@ -2,6 +2,22 @@
 
 This project follows [Semantic Versioning](https://semver.org).
 
+## [0.3.0] — 2026-07-26
+
+Research: quantifies the orchestration value and sets up real Magma measurement.
+
+### Added
+- **Single vs. multi-agent triage experiment** (`raon.bench.experiment`,
+  `python -m raon.bench.experiment`): measures crash-deduplication quality of a naive
+  single-pass baseline vs raon's normalized dedup + Supervisor. Measured result: the baseline
+  over-reports 4 bugs as 12 (raw stacks vary with ASLR; F1 0.00), while raon recovers the exact
+  4 clusters (F1 1.00). See `docs/evaluation.md`.
+- **Magma GitHub Actions workflow** (`.github/workflows/magma.yml`, `workflow_dispatch`): builds
+  a Magma target and runs a bounded campaign on an x86_64 runner, then parses the canary ground
+  truth with `raon.bench`. The honest path to real Magma numbers without an x86_64 host locally.
+- Generic FILE_ARG driver so libFuzzer targets run under ASan-only (no libFuzzer runtime), which
+  lets the orchestration experiment run on macOS as well as Linux.
+
 ## [0.2.0] — 2026-07-26
 
 Adds real evidence, friendlier APIs, and stronger verification, addressing external README

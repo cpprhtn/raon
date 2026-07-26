@@ -49,9 +49,44 @@ python -m raon.bench.eval --time 20 --json eval.json --md eval.md
 
 The targets live in `src/raon/bench/eval_targets/`; the runner is `raon.bench.eval`.
 
+## Single vs. multi-agent triage (orchestration value)
+
+A recurring question for multi-agent designs is whether the orchestration earns its keep. This
+experiment isolates one axis of it — **crash deduplication quality** — with real data and no
+live LLM required.
+
+The same bug produces different raw sanitizer output across runs (ASLR varies addresses) and
+rebuilds (line numbers, build paths). A naive single-pass approach that dedups on the raw stack
+text therefore reports the same bug many times. raon normalizes the stack (strips addresses,
+line numbers, build paths) and merges via the Supervisor.
+
+Each buggy target is run 3 times; ground truth is 1 bug per target (4 bugs, 12 crash reports):
+
+| Approach | Unique bugs reported | Dedup F1 (vs gold) |
+|---|---|---|
+| Baseline (single, raw-stack dedup) | 12 | 0.00 |
+| raon (normalized dedup + Supervisor) | 4 | 1.00 |
+
+The naive baseline over-reports 4 bugs as 12 (3× inflation) and scores 0.00 pairwise F1; raon
+recovers the exact ground-truth clustering (F1 1.00). This is the deduplication slice of the
+broader single-vs-multi study (a full study also needs a live LLM and a known-bug set — Magma).
+
+Reproduce (needs clang with ASan; runs on macOS or Linux):
+
+```bash
+python -m raon.bench.experiment
+```
+
 ## Magma (planned)
 
 raon reads Magma's canary `monitor` output as ground truth via `raon.bench` (per-bug
 reached/triggered, time-to-first-crash) and computes deduplication accuracy and false-positive
-rate against it. Running the campaigns requires an x86_64 Linux host with Docker; a `fuzzers/raon/`
-integration is provided under `fuzzers/`. Results will be published here once a campaign has run.
+rate against it. Running the campaigns requires an **x86_64 Linux host with Docker** (Magma has
+no arm64 support, so it cannot run on Apple Silicon locally). The `fuzzers/raon/` integration is
+provided under `fuzzers/`.
+
+To produce real numbers on x86_64 without such a host, use the **Magma GitHub Actions workflow**
+(`.github/workflows/magma.yml`): trigger it from the Actions tab (`workflow_dispatch`) and it
+builds a Magma target, runs a bounded campaign on an x86_64 runner, parses the ground truth with
+`raon.bench`, and uploads the results. Numbers will be added here once a campaign has been run;
+none are claimed until then.

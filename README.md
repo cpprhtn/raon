@@ -179,6 +179,11 @@ Measured results (raon 0.2.0, Docker image):
 `docker run --rm raon:ci python -m raon.bench.eval`. Details and methodology:
 [docs/evaluation.md](docs/evaluation.md).
 
+**Orchestration value (single vs. multi-agent).** On the same bugs run repeatedly (raw stacks
+vary with ASLR), a naive single-pass baseline over-reports 4 bugs as 12 (dedup F1 0.00); raon's
+normalized dedup + Supervisor recovers exactly 4 (F1 1.00). Reproduce with
+`python -m raon.bench.experiment`.
+
 **Magma (planned).** raon also includes an adapter (`raon.bench`) that reads the
 [Magma](https://github.com/HexHive/magma) benchmark's canary ground truth for known-CVE
 reproduction metrics. Running those campaigns requires an x86_64 Linux host with Docker; results

@@ -160,6 +160,10 @@ raon 将模糊器作为原生子进程运行，仅在决策点（编写 harness�
 4/4 个 bug 目标被检出，0 误报。复现：`docker run --rm raon:ci python -m raon.bench.eval`。
 方法与细节：[docs/evaluation.md](docs/evaluation.md)。
 
+**编排价值（单体 vs 多智能体）。** 对同一 bug 重复运行时（raw 栈因 ASLR 而变化），朴素的单体
+去重把 4 个 bug 过度上报为 12 个（去重 F1 0.00），而 raon 的规范化去重 + Supervisor 恰好合并为
+4 个（F1 1.00）。复现：`python -m raon.bench.experiment`。
+
 **Magma（计划中）。** raon 还包含一个适配器（`raon.bench`），用于读取
 [Magma](https://github.com/HexHive/magma) 基准的 canary ground truth 以计算已知 CVE 复现指标。
 运行这些活动需要 x86_64 Linux 主机 + Docker；在运行一次活动后会公布结果。在此之前不声称任何 CVE

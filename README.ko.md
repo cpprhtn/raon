@@ -170,6 +170,10 @@ Python 3.10+가 도는 곳이면 어디서나 동작합니다.
 버그 타겟 4/4 탐지, 오탐 0. 재현: `docker run --rm raon:ci python -m raon.bench.eval`.
 방법론 상세: [docs/evaluation.md](docs/evaluation.md).
 
+**오케스트레이션 가치(단일 vs 멀티에이전트).** 같은 버그를 반복 실행하면 ASLR로 raw 스택이
+달라지는데, 순진한 단일 dedup은 버그 4개를 12개로 과다계수(dedup F1 0.00)하고, raon의 정규화
+dedup + Supervisor는 정확히 4개로 합칩니다(F1 1.00). 재현: `python -m raon.bench.experiment`.
+
 **Magma (예정).** raon은 [Magma](https://github.com/HexHive/magma) 벤치마크의 canary ground
 truth를 읽어 알려진 CVE 재현 지표를 계산하는 어댑터(`raon.bench`)도 포함합니다. 이 캠페인 실행에는
 x86_64 Linux 호스트 + Docker가 필요하며, 캠페인을 돌린 뒤 결과를 공개합니다. 그전까지 어떤 CVE
