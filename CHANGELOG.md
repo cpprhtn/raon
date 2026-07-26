@@ -31,8 +31,8 @@ review feedback.
   synthesized harness actually executes the target function; `HarnessSynthesizer(verify_reach=True)`
   feeds a reach-repair prompt when it doesn't. Graceful degradation without llvm coverage tools.
 - **JSON domain pack** (`raon.knowledge.json_pack`) alongside PNG.
-- **Magma integration** (`fuzzers/raon/`): the five-script contract to plug raon into Magma on
-  an x86_64 Linux host (campaign run deferred to such a host).
+- **Magma ground-truth adapter** (`raon.bench`): reads Magma's canary `monitor` output for
+  reached/triggered metrics. (Campaigns require an x86_64 Linux host; 0.3.0 adds a CI workflow.)
 - CI: a Docker container-integration job runs the full suite (clang + libFuzzer + coverage).
 
 ### Changed

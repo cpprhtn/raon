@@ -79,14 +79,13 @@ python -m raon.bench.experiment
 
 ## Magma (planned)
 
-raon reads Magma's canary `monitor` output as ground truth via `raon.bench` (per-bug
-reached/triggered, time-to-first-crash) and computes deduplication accuracy and false-positive
-rate against it. Running the campaigns requires an **x86_64 Linux host with Docker** (Magma has
-no arm64 support, so it cannot run on Apple Silicon locally). The `fuzzers/raon/` integration is
-provided under `fuzzers/`.
+raon is an analysis layer, not a fuzzer, so it runs on top of Magma's stock fuzzers rather than
+shipping its own. It reads Magma's canary `monitor` output as ground truth via `raon.bench`
+(per-bug reached/triggered, time-to-first-crash). Running the campaigns requires an **x86_64
+Linux host with Docker** (Magma has no arm64 support, so it cannot run on Apple Silicon locally).
 
 To produce real numbers on x86_64 without such a host, use the **Magma GitHub Actions workflow**
-(`.github/workflows/magma.yml`): trigger it from the Actions tab (`workflow_dispatch`) and it
-builds a Magma target, runs a bounded campaign on an x86_64 runner, parses the ground truth with
-`raon.bench`, and uploads the results. Numbers will be added here once a campaign has been run;
-none are claimed until then.
+(`.github/workflows/magma.yml`): trigger it from the Actions tab (`workflow_dispatch`). It builds
+a Magma target with a stock fuzzer (libfuzzer by default), runs a bounded campaign on an x86_64
+runner, parses the ground truth with `raon.bench`, and uploads the results. Numbers will be added
+here once a campaign has been run; none are claimed until then.

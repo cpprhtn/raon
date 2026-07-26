@@ -1,11 +1,15 @@
 name: Magma benchmark
 
 # Manual, on-demand Magma campaign on an x86_64 Linux runner (Magma has no
-# arm64 support, so this cannot run on Apple Silicon locally). Produces REAL
-# reached/triggered ground-truth metrics via raon.bench, uploaded as an artifact.
+# arm64 support, so this cannot run on Apple Silicon locally). raon is an
+# analysis layer, not a fuzzer, so this uses Magma's stock fuzzer (libfuzzer by
+# default) and has raon CONSUME the results: it parses the canary `monitor`
+# ground truth via raon.bench. Real reached/triggered metrics are uploaded as an
+# artifact.
 #
-# Trigger from the Actions tab (workflow_dispatch). Keep the timeout modest for
-# a smoke run; raise it for a proper campaign.
+# Trigger from the Actions tab (workflow_dispatch). Keep the timeout modest for a
+# smoke run; raise it for a proper campaign. The Magma image build is heavy
+# (it compiles libFuzzer from an LLVM checkout), so allow ample job time.
 on:
   workflow_dispatch:
     inputs:
@@ -16,8 +20,8 @@ on:
         description: "Harness program"
         default: "libpng_read_fuzzer"
       fuzzer:
-        description: "Fuzzer integration (raon or a stock Magma fuzzer)"
-        default: "raon"
+        description: "Stock Magma fuzzer to drive the campaign"
+        default: "libfuzzer"
       timeout:
         description: "Campaign length (Magma format, e.g. 10m, 1h)"
         default: "10m"
@@ -25,7 +29,7 @@ on:
 jobs:
   magma:
     runs-on: ubuntu-latest  # x86_64
-    timeout-minutes: 180
+    timeout-minutes: 300
     steps:
       - name: Checkout raon
         uses: actions/checkout@v4
@@ -38,9 +42,6 @@ jobs:
           repository: HexHive/magma
           ref: v1.2
           path: magma
-
-      - name: Install raon's Magma fuzzer integration
-        run: cp -r raon/fuzzers/raon magma/fuzzers/raon
 
       - name: AFL core_pattern (required by Magma)
         run: sudo bash -c 'echo core > /proc/sys/kernel/core_pattern'
@@ -69,6 +70,7 @@ jobs:
               print("no monitor output found"); raise SystemExit(1)
           c = parse_monitor_dir(mon)
           out = {
+              "fuzzer": os.environ.get("FUZZER", "libfuzzer"),
               "bugs_reached": c.bugs_reached,
               "bugs_triggered": c.bugs_triggered,
               "time_to_first_trigger_s": c.time_to_first_trigger(),
@@ -78,6 +80,8 @@ jobs:
           print(json.dumps(out, indent=2))
           pathlib.Path("magma_results.json").write_text(json.dumps(out, indent=2))
           PY
+        env:
+          FUZZER: ${{ inputs.fuzzer }}
 
       - name: Upload results
         if: always()
