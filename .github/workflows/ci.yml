@@ -6,7 +6,9 @@ on:
   pull_request:
 
 jobs:
-  lint-type-test:
+  # Lint, type-check, and unit tests across Python versions. Unit tests are
+  # clang-free by design (integration tests are excluded here).
+  lint-type-unit:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -14,9 +16,6 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install clang (ASan/UBSan/libFuzzer)
-        run: sudo apt-get update && sudo apt-get install -y clang llvm
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
@@ -34,7 +33,22 @@ jobs:
       - name: Mypy (types)
         run: mypy
 
-      - name: Pytest (unit + integration; clang available)
-        env:
-          ASAN_OPTIONS: abort_on_error=0:detect_leaks=0
-        run: pytest -q --cov=raon --cov-report=term-missing
+      - name: Pytest (unit only)
+        run: pytest -q -m "not integration"
+
+  # Full suite (unit + integration) in the reproducible Docker image, which has
+  # clang, the libFuzzer runtime, and llvm coverage tools. This exercises real
+  # fuzzing, harness reach-verification, and the self-contained evaluation.
+  integration-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -f docker/Dockerfile -t raon:ci .
+
+      - name: Full test suite (unit + integration)
+        run: docker run --rm raon:ci pytest -q
+
+      - name: Self-contained evaluation
+        run: docker run --rm raon:ci python -m raon.bench.eval --time 20

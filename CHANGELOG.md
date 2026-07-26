@@ -2,6 +2,34 @@
 
 This project follows [Semantic Versioning](https://semver.org).
 
+## [0.2.0] — 2026-07-26
+
+Adds real evidence, friendlier APIs, and stronger verification, addressing external README
+review feedback.
+
+### Added
+- **Self-contained evaluation** (`raon.bench.eval`, `python -m raon.bench.eval`): a suite of
+  planted-bug libFuzzer targets plus a safe target, run end to end. Measured results
+  (Docker/Linux): 4/4 buggy targets detected, 0 false positives. See `docs/evaluation.md`.
+- **Harness reach-verification** (`raon.fuzzing.coverage`): source-based coverage confirms a
+  synthesized harness actually executes the target function; `HarnessSynthesizer(verify_reach=True)`
+  feeds a reach-repair prompt when it doesn't. Graceful degradation without llvm coverage tools.
+- **JSON domain pack** (`raon.knowledge.json_pack`) alongside PNG.
+- **Magma integration** (`fuzzers/raon/`): the five-script contract to plug raon into Magma on
+  an x86_64 Linux host (campaign run deferred to such a host).
+- CI: a Docker container-integration job runs the full suite (clang + libFuzzer + coverage).
+
+### Changed
+- **Agents renamed to role-based names**: `AgentA → StaticAnalysisAgent`,
+  `AgentB → CrashTriageAgent`, `AgentC → InterfaceInferenceAgent`; `SourceComponent` values are
+  role-based too. Old names remain as `DeprecationWarning` aliases for one release.
+- READMEs (en/ko/zh): narrowed the tagline (binary analysis marked experimental), added a
+  platform-support matrix, a benchmarking section with the real eval table, an agents table,
+  and version-pinning guidance.
+
+### Deprecated
+- `AgentA` / `AgentB` / `AgentC` — use the role-based names above.
+
 ## [0.1.0] — 2026-07-24
 
 First working release. The core pipeline is covered by tests (120 tests, ruff + mypy strict
