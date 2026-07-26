@@ -53,10 +53,18 @@ jobs:
       - name: Run campaign
         working-directory: magma
         run: |
-          # WORKDIR must live outside the repo tree (Magma docker-context gotcha)
+          # SHARED must live outside the repo tree (Magma docker-context gotcha)
+          # and must be pre-created by us: start.sh bind-mounts it into the
+          # container, and if it doesn't exist Docker creates it as root, so the
+          # container's non-root magma user can't write monitor/findings. Create
+          # it here (as the runner) and make it world-writable to be safe.
+          SHARED="$RUNNER_TEMP/magma_workdir"
+          mkdir -p "$SHARED"
+          chmod 777 "$SHARED"
           FUZZER=${{ inputs.fuzzer }} TARGET=${{ inputs.target }} \
-          PROGRAM=${{ inputs.program }} SHARED="$RUNNER_TEMP/magma_workdir" \
+          PROGRAM=${{ inputs.program }} SHARED="$SHARED" \
           POLL=5 TIMEOUT=${{ inputs.timeout }} ./tools/captain/start.sh
+          echo "== monitor snapshots ==" && ls -la "$SHARED/monitor" 2>&1 | head
 
       - name: Parse ground truth with raon.bench
         run: |
