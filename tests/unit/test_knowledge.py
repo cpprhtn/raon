@@ -55,5 +55,34 @@ def test_register_builtins_into_blackboard() -> None:
         assert any(k.domain == "image/png" for k in matched)
 
 
-def test_builtin_list_nonempty() -> None:
-    assert len(builtin_knowledge_bases()) >= 1
+def test_builtin_list_has_png_and_json() -> None:
+    domains = {kb.domain for kb in builtin_knowledge_bases()}
+    assert "image/png" in domains
+    assert "text/json" in domains
+
+
+def test_json_kb_valid_and_seeds_parse() -> None:
+    import json as _json
+
+    from raon.knowledge.json_pack import JSON_SEEDS, json_knowledge_base
+
+    kb = json_knowledge_base()
+    assert kb.domain == "text/json"
+    assert kb.known_weak_interfaces
+    # 시드가 실제로 유효한 JSON이어야(구조 인지 시드 프라이밍 전제)
+    for seed in JSON_SEEDS:
+        _json.loads(seed.decode("utf-8"))
+
+
+def test_json_write_seed_templates(tmp_path) -> None:
+    from raon.knowledge.json_pack import write_seed_templates
+
+    paths = write_seed_templates(tmp_path)
+    assert paths and (tmp_path / "min.json").exists()
+
+
+def test_json_kb_registered_in_blackboard() -> None:
+    with Blackboard() as bb:
+        register_builtins(bb)
+        assert bb.get_knowledge("text/json") is not None
+        assert bb.knowledge_for_tags(["json"])

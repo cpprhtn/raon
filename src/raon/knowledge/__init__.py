@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from raon.contracts import KnowledgeBase
 
+from .json_pack import json_knowledge_base
 from .png import minimal_png, png_knowledge_base, write_seed_templates
 
 if TYPE_CHECKING:
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
 def builtin_knowledge_bases() -> list[KnowledgeBase]:
     """내장 KnowledgeBase 목록."""
-    return [png_knowledge_base()]
+    return [png_knowledge_base(), json_knowledge_base()]
 
 
 def register_builtins(blackboard: Blackboard) -> None:
@@ -31,6 +32,7 @@ __all__ = [
     "builtin_knowledge_bases",
     "register_builtins",
     "png_knowledge_base",
+    "json_knowledge_base",
     "minimal_png",
     "write_seed_templates",
 ]
