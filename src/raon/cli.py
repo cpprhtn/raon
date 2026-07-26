@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 from raon import __version__
-from raon.agents import AgentB, Supervisor
+from raon.agents import CrashTriageAgent, Supervisor
 from raon.contracts import TargetDescriptor, TargetKind
 from raon.knowledge import builtin_knowledge_bases
 from raon.store import Blackboard
@@ -51,7 +51,7 @@ def cmd_kb(_args: argparse.Namespace) -> int:
 
 def cmd_triage(args: argparse.Namespace) -> int:
     report = Path(args.report).read_text(encoding="utf-8")
-    finding = AgentB().triage(
+    finding = CrashTriageAgent().triage(
         report,
         target_id=args.target_id,
         reproducer=args.reproducer or args.report,
@@ -92,7 +92,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     workdir.mkdir(parents=True, exist_ok=True)
     harness = compile_harness([args.target], workdir / "harness", mode=HarnessMode.FILE_ARG)
 
-    agent_b = AgentB()
+    triage_agent = CrashTriageAgent()
     findings = []
     target = TargetDescriptor(
         id=args.target_id, kind=TargetKind.SOURCE_FN, location=args.target
@@ -103,7 +103,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             result = run_input(harness, inp)
             if not result.crashed:
                 continue
-            finding = agent_b.triage(
+            finding = triage_agent.triage(
                 result.sanitizer_output,
                 target_id=target.id,
                 reproducer=str(inp),

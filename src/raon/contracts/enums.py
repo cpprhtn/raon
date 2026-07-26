@@ -36,10 +36,13 @@ class EvidenceKind(str, Enum):
 
 
 class SourceComponent(str, Enum):
-    """`Finding.source_component` — 어느 컴포넌트가 이 Finding을 생산했나."""
+    """`Finding.source_component` — 어느 컴포넌트가 이 Finding을 생산했나.
+
+    값은 역할 기반이다(0.2.0에서 agent_A/B/C 코드명 대체). 스토어에 문자열로 저장되므로
+    외부 사용자가 리포트에서 바로 이해할 수 있게 명시적 이름을 쓴다.
+    """
 
     FUZZER = "fuzzer"
-    AGENT_A = "agent_A"
-    AGENT_B = "agent_B"
-    AGENT_C = "agent_C"
-    STATIC = "static"
+    STATIC_ANALYSIS = "static_analysis"
+    CRASH_TRIAGE = "crash_triage"
+    INTERFACE_INFERENCE = "interface_inference"

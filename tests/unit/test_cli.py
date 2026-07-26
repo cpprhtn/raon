@@ -31,7 +31,7 @@ def test_triage_report(capsys) -> None:
     assert rc == 0
     data = json.loads(capsys.readouterr().out)
     assert data["category"] == "memory"
-    assert data["source_component"] == "agent_B"
+    assert data["source_component"] == "crash_triage"
 
 
 def test_triage_stores_to_db(tmp_path: Path, capsys) -> None:

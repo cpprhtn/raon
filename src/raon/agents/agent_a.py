@@ -25,6 +25,8 @@ from raon.contracts import (
 from raon.llm import Provider
 from raon.triage.dedup import dedup_key_from_functions
 
+from ._compat import deprecated_alias
+
 # Semgrep 실행기: 경로 → 결과 dict 리스트 (semgrep --json 의 "results").
 SemgrepRunner = Callable[[str], list[dict[str, Any]]]
 
@@ -71,10 +73,10 @@ def _category_for(check_id: str, message: str) -> FindingCategory:
     return FindingCategory.LOGIC
 
 
-class AgentA:
-    """정적 분석 에이전트."""
+class StaticAnalysisAgent:
+    """정적 분석 에이전트 (Semgrep/CodeQL + LLM 해석)."""
 
-    source = SourceComponent.AGENT_A
+    source = SourceComponent.STATIC_ANALYSIS
 
     def __init__(
         self,
@@ -112,3 +114,7 @@ class AgentA:
                 )
             )
         return findings
+
+
+# Deprecated alias (0.2.0). Use StaticAnalysisAgent.
+AgentA = deprecated_alias(StaticAnalysisAgent, "AgentA")

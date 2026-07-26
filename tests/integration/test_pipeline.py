@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from raon.agents import AgentB, Supervisor
+from raon.agents import CrashTriageAgent, Supervisor
 from raon.contracts import EvidenceKind, FindingCategory, TargetDescriptor, TargetKind
 from raon.fuzzing.engine import (
     HarnessMode,
@@ -62,7 +62,7 @@ def test_full_vertical_slice(harness, tmp_path: Path) -> None:
     assert result.crashed
 
     # 2. Agent B 트리아지 → Finding
-    b = AgentB()
+    b = CrashTriageAgent()
     finding = b.triage(
         result.sanitizer_output,
         target_id="tgt_vuln",
@@ -112,7 +112,7 @@ def test_libfuzzer_coverage_guided_finds_crash(tmp_path: Path) -> None:
     assert result.crashed
     assert result.reproducer is not None
 
-    finding = AgentB().triage(
+    finding = CrashTriageAgent().triage(
         result.sanitizer_output, target_id="tgt_lf", reproducer=result.reproducer
     )
     assert finding is not None

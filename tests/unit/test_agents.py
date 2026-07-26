@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from raon.agents import AgentA, AgentB, AgentC, Supervisor
+from raon.agents import (
+    CrashTriageAgent,
+    InterfaceInferenceAgent,
+    StaticAnalysisAgent,
+    Supervisor,
+)
 from raon.contracts import (
     EvidenceKind,
     FindingCategory,
@@ -19,13 +24,35 @@ from raon.llm import MockProvider
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "sanitizer"
 
 
-# ---- Agent B ---------------------------------------------------------------
+# ---- deprecated aliases (0.2.0) --------------------------------------------
+def test_deprecated_aliases_warn_and_work() -> None:
+    import warnings
+
+    from raon.agents import AgentA, AgentB, AgentC
+
+    for alias, new in [
+        (AgentB, CrashTriageAgent),
+        (AgentC, InterfaceInferenceAgent),
+    ]:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            inst = alias()
+            assert isinstance(inst, new)  # alias is a subclass of the new class
+            assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+    # AgentA needs no args either
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert isinstance(AgentA(), StaticAnalysisAgent)
+        assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+# ---- Crash triage (dynamic) ------------------------------------------------
 def test_agent_b_triage_produces_finding() -> None:
     report = (FIXTURES / "heap_buffer_overflow.txt").read_text(encoding="utf-8")
-    b = AgentB()
+    b = CrashTriageAgent()
     finding = b.triage(report, target_id="tgt_libpng", reproducer="poc.bin")
     assert finding is not None
-    assert finding.source_component == SourceComponent.AGENT_B
+    assert finding.source_component == SourceComponent.CRASH_TRIAGE
     assert finding.category == FindingCategory.MEMORY
     assert finding.confidence == 0.95
 
@@ -33,14 +60,14 @@ def test_agent_b_triage_produces_finding() -> None:
 def test_agent_b_root_cause_summary() -> None:
     report = (FIXTURES / "heap_buffer_overflow.txt").read_text(encoding="utf-8")
     provider = MockProvider(default_text="png_read_idat에서 힙 경계 초과 읽기")
-    b = AgentB(provider)
+    b = CrashTriageAgent(provider)
     summary = b.root_cause_summary(report)
     assert summary is not None and "png_read_idat" in summary
 
 
 def test_agent_b_no_provider_no_summary() -> None:
     report = (FIXTURES / "heap_buffer_overflow.txt").read_text(encoding="utf-8")
-    assert AgentB().root_cause_summary(report) is None
+    assert CrashTriageAgent().root_cause_summary(report) is None
 
 
 # ---- Agent C ---------------------------------------------------------------
@@ -56,7 +83,7 @@ def _png_target() -> TargetDescriptor:
 
 def test_agent_c_hypotheses_without_provider() -> None:
     kb = png_knowledge_base()
-    c = AgentC()
+    c = InterfaceInferenceAgent()
     findings = c.hypothesize(_png_target(), kb)
     # KB의 모든 취약 인터페이스에 대해 낮은 confidence 가설
     assert len(findings) == len(kb.known_weak_interfaces)
@@ -67,7 +94,7 @@ def test_agent_c_hypotheses_without_provider() -> None:
 def test_agent_c_llm_filters_none() -> None:
     kb = png_knowledge_base()
     provider = MockProvider(default_text="NONE")
-    c = AgentC(provider)
+    c = InterfaceInferenceAgent(provider)
     findings = c.hypothesize(_png_target(), kb)
     assert findings == []  # LLM이 전부 무관하다고 판정
 
@@ -75,7 +102,7 @@ def test_agent_c_llm_filters_none() -> None:
 def test_agent_c_llm_accepts() -> None:
     kb = png_knowledge_base()
     provider = MockProvider(default_text="이 함수는 idat 경계를 다뤄 위험하다")
-    c = AgentC(provider)
+    c = InterfaceInferenceAgent(provider)
     findings = c.hypothesize(_png_target(), kb)
     assert len(findings) == len(kb.known_weak_interfaces)
 
@@ -92,28 +119,28 @@ def test_agent_a_with_injected_semgrep() -> None:
             }
         ]
 
-    a = AgentA(semgrep_runner=fake_runner)
+    a = StaticAnalysisAgent(semgrep_runner=fake_runner)
     findings = a.analyze("src/decode.c", target_id="tgt_x")
     assert len(findings) == 1
     f = findings[0]
-    assert f.source_component == SourceComponent.AGENT_A
+    assert f.source_component == SourceComponent.STATIC_ANALYSIS
     assert f.evidence.kind == EvidenceKind.STATIC_PATH
     assert f.category == FindingCategory.MEMORY  # 'buffer'/'overflow' 힌트
 
 
 def test_agent_a_empty_when_no_results() -> None:
-    a = AgentA(semgrep_runner=lambda p: [])
+    a = StaticAnalysisAgent(semgrep_runner=lambda p: [])
     assert a.analyze("x", target_id="t") == []
 
 
 # ---- Supervisor ------------------------------------------------------------
 def test_supervisor_triage_ranks_dynamic_first() -> None:
     report = (FIXTURES / "heap_buffer_overflow.txt").read_text(encoding="utf-8")
-    b = AgentB()
+    b = CrashTriageAgent()
     dyn = b.triage(report, target_id="t", reproducer="poc.bin", finding_id="dyn")
     assert dyn is not None
 
-    a = AgentA(semgrep_runner=lambda p: [
+    a = StaticAnalysisAgent(semgrep_runner=lambda p: [
         {"check_id": "logic.x", "path": "a.c", "start": {"line": 1}, "extra": {"message": "logic bug"}}
     ])
     static = a.analyze("a.c", target_id="t")
@@ -128,7 +155,7 @@ def test_supervisor_triage_ranks_dynamic_first() -> None:
 
 def test_supervisor_dedup_collapses_duplicates() -> None:
     report = (FIXTURES / "heap_buffer_overflow.txt").read_text(encoding="utf-8")
-    b = AgentB()
+    b = CrashTriageAgent()
     f1 = b.triage(report, target_id="t", reproducer="a.bin", finding_id="f1")
     f2 = b.triage(report, target_id="t", reproducer="b.bin", finding_id="f2")
     assert f1 is not None and f2 is not None

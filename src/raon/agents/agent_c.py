@@ -21,13 +21,15 @@ from raon.contracts import (
 from raon.llm import LLMRequest, Message, ModelTier, Provider
 from raon.triage.dedup import Frame, dedup_key
 
+from ._compat import deprecated_alias
+
 _HYPOTHESIS_CONFIDENCE = 0.3
 
 
-class AgentC:
-    """취약 인터페이스 추론 에이전트."""
+class InterfaceInferenceAgent:
+    """취약 인터페이스 추론 에이전트 (KnowledgeBase 기반 가설 생성)."""
 
-    source = SourceComponent.AGENT_C
+    source = SourceComponent.INTERFACE_INFERENCE
 
     def __init__(self, provider: Provider | None = None):
         self._provider = provider
@@ -92,3 +94,7 @@ class AgentC:
         if not text or text.upper().startswith("NONE"):
             return None
         return text
+
+
+# Deprecated alias (0.2.0). Use InterfaceInferenceAgent.
+AgentC = deprecated_alias(InterfaceInferenceAgent, "AgentC")

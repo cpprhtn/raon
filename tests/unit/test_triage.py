@@ -31,10 +31,10 @@ def _finding(
         src = SourceComponent.FUZZER
     elif kind == EvidenceKind.STATIC_PATH:
         ev = Evidence(kind=kind, static_path=static_path or ["rule", "loc"])
-        src = SourceComponent.AGENT_A
+        src = SourceComponent.STATIC_ANALYSIS
     else:
         ev = Evidence(kind=kind)
-        src = SourceComponent.AGENT_C
+        src = SourceComponent.INTERFACE_INFERENCE
     return Finding(
         id=fid,
         target_id="t",

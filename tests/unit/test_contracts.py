@@ -117,7 +117,7 @@ def test_confidence_bounds() -> None:
             category=FindingCategory.LOGIC,
             evidence=Evidence(kind=EvidenceKind.AGENT_INFERENCE),
             confidence=2.0,
-            source_component=SourceComponent.AGENT_C,
+            source_component=SourceComponent.INTERFACE_INFERENCE,
             dedup_key="k",
         )
 
@@ -127,13 +127,13 @@ def test_enum_values_serialize_as_strings() -> None:
         target_id="t",
         category=FindingCategory.UNDEFINED_BEHAVIOR,
         evidence=Evidence(kind=EvidenceKind.AGENT_INFERENCE),
-        source_component=SourceComponent.AGENT_C,
+        source_component=SourceComponent.INTERFACE_INFERENCE,
         dedup_key="k",
     )
     data = json.loads(f.model_dump_json())
     assert data["category"] == "undefined_behavior"
     assert data["evidence"]["kind"] == "agent_inference"
-    assert data["source_component"] == "agent_C"
+    assert data["source_component"] == "interface_inference"
 
 
 def test_validate_assignment() -> None:

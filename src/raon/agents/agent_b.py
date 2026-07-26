@@ -10,11 +10,13 @@ from raon.contracts import Finding, SourceComponent
 from raon.fuzzing.asan import finding_from_report, parse_report
 from raon.llm import LLMRequest, Message, ModelTier, Provider
 
+from ._compat import deprecated_alias
 
-class AgentB:
-    """새니타이저 리포트 → 정규화 Finding + (선택) LLM root-cause 요약."""
 
-    source = SourceComponent.AGENT_B
+class CrashTriageAgent:
+    """새니타이저 리포트 → 정규화 Finding + (선택) LLM root-cause 요약 (동적 크래시 트리아지)."""
+
+    source = SourceComponent.CRASH_TRIAGE
 
     def __init__(self, provider: Provider | None = None):
         self._provider = provider
@@ -68,3 +70,7 @@ class AgentB:
             )
         )
         return resp.text.strip() or None
+
+
+# Deprecated alias (0.2.0). Use CrashTriageAgent.
+AgentB = deprecated_alias(CrashTriageAgent, "AgentB")
